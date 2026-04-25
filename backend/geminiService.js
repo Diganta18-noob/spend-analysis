@@ -1,4 +1,5 @@
 import fetch from "node-fetch";
+import { recordApiCall } from "./db.js";
 
 const AI_PROMPT = `You are an expert financial analyst specialising in personal bank statement analysis for Indian users.
 
@@ -82,47 +83,61 @@ export async function analyzeStatementsServer(files) {
 
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`;
 
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
-
-  if (!response.ok) {
-    const errBody = await response.text();
-    try {
-      const parsedBody = JSON.parse(errBody);
-      if (parsedBody?.error?.message) {
-        throw new Error(`Gemini Error: ${parsedBody.error.message}`);
-      }
-    } catch (e) {
-      if (e.message.includes("Gemini Error")) throw e;
-    }
-    throw new Error(`Gemini API error (${response.status}): ${errBody}`);
-  }
-
-  const result = await response.json();
-  const text = result?.candidates?.[0]?.content?.parts?.[0]?.text;
-
-  if (!text) {
-    throw new Error("Empty response from Gemini API.");
-  }
-
-  const cleaned = text
-    .replace(/```json\s*/gi, "")
-    .replace(/```\s*/gi, "")
-    .trim();
+  const startTime = Date.now();
+  let success = false;
+  let tokensEst = files.reduce((acc, f) => acc + Math.ceil(f.buffer.length / 1000), 1000); // Rough token estimate
+  let errorMsg = null;
 
   try {
-    const parsed = JSON.parse(cleaned);
-    if (!parsed.transactions || !Array.isArray(parsed.transactions)) {
-      throw new Error("Invalid response format: missing transactions array.");
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errBody = await response.text();
+      try {
+        const parsedBody = JSON.parse(errBody);
+        if (parsedBody?.error?.message) {
+          throw new Error(`Gemini Error: ${parsedBody.error.message}`);
+        }
+      } catch (e) {
+        if (e.message.includes("Gemini Error")) throw e;
+      }
+      throw new Error(`Gemini API error (${response.status}): ${errBody}`);
     }
-    return parsed;
-  } catch (e) {
-    console.error("Failed to parse Gemini response:", text);
-    throw new Error("AI returned invalid JSON. Please try again.");
+
+    const result = await response.json();
+    const text = result?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if (!text) {
+      throw new Error("Empty response from Gemini API.");
+    }
+
+    const cleaned = text
+      .replace(/```json\s*/gi, "")
+      .replace(/```\s*/gi, "")
+      .trim();
+
+    try {
+      const parsed = JSON.parse(cleaned);
+      if (!parsed.transactions || !Array.isArray(parsed.transactions)) {
+        throw new Error("Invalid response format: missing transactions array.");
+      }
+      success = true;
+      return parsed;
+    } catch (e) {
+      console.error("Failed to parse Gemini response:", text);
+      throw new Error("AI returned invalid JSON. Please try again.");
+    }
+  } catch (error) {
+    errorMsg = error.message;
+    throw error;
+  } finally {
+    const latency = Date.now() - startTime;
+    await recordApiCall({ success, latency, tokens: tokensEst, error: errorMsg, provider: "gemini" });
   }
 }

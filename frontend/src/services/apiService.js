@@ -79,3 +79,31 @@ export async function deleteAnalysis(id) {
   if (!res.ok) throw new Error("Failed to delete analysis");
   return res.json();
 }
+
+// --- Audit Logs ---
+export async function fetchAuditLogs(limit = 50, offset = 0) {
+  const res = await fetch(`${API_BASE}/admin/audit-logs?limit=${limit}&offset=${offset}`, {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) throw new Error("Failed to fetch audit logs");
+  return res.json();
+}
+
+// --- API Usage ---
+export async function fetchApiUsage() {
+  const res = await fetch(`${API_BASE}/admin/api-usage`, {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) throw new Error("Failed to fetch API usage");
+  return res.json();
+}
+
+// --- Log CSV Export ---
+export async function logCsvExport() {
+  const res = await fetch(`${API_BASE}/admin/log-export`, {
+    method: "POST",
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) throw new Error("Failed to log export");
+  return res.json();
+}

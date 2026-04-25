@@ -1,0 +1,488 @@
+{
+  "analyses": [
+    {
+      "id": "f623f92e-536c-404b-a452-aa46d3e859e7",
+      "period": "26 Mar – 04 Apr 2026",
+      "bank": "Indian Bank",
+      "account_holder": "Diganta Bis",
+      "total_spent": 3243.4900000000002,
+      "transaction_count": 31,
+      "data": {
+        "id": "f623f92e-536c-404b-a452-aa46d3e859e7",
+        "period": "26 Mar – 04 Apr 2026",
+        "bank": "Indian Bank",
+        "account_holder": "Diganta Bis",
+        "opening_balance": 272.11,
+        "closing_balance": 428.62,
+        "total_credits": 14900,
+        "transactions": [
+          {
+            "date": "2026-03-26",
+            "desc": "SmartQ Canteen",
+            "amount": 95,
+            "cat": "Office Food"
+          },
+          {
+            "date": "2026-03-26",
+            "desc": "SmartQ Canteen",
+            "amount": 40,
+            "cat": "Office Food"
+          },
+          {
+            "date": "2026-03-26",
+            "desc": "Thumukun",
+            "amount": 56,
+            "cat": "Food & Dining"
+          },
+          {
+            "date": "2026-03-26",
+            "desc": "Aninda B",
+            "amount": 280,
+            "cat": "Personal Transfer"
+          },
+          {
+            "date": "2026-03-27",
+            "desc": "Mohd Ahm",
+            "amount": 390,
+            "cat": "Personal Transfer"
+          },
+          {
+            "date": "2026-03-28",
+            "desc": "Matury S",
+            "amount": 110,
+            "cat": "Personal Transfer"
+          },
+          {
+            "date": "2026-03-28",
+            "desc": "Mr Nares",
+            "amount": 25,
+            "cat": "Personal Transfer"
+          },
+          {
+            "date": "2026-03-28",
+            "desc": "Uma Indu",
+            "amount": 500,
+            "cat": "Personal Transfer"
+          },
+          {
+            "date": "2026-03-30",
+            "desc": "Nagesh M",
+            "amount": 30,
+            "cat": "Personal Transfer"
+          },
+          {
+            "date": "2026-03-30",
+            "desc": "Google Play",
+            "amount": 15,
+            "cat": "Bills & Subscriptions"
+          },
+          {
+            "date": "2026-03-31",
+            "desc": "Mr Gumma",
+            "amount": 45,
+            "cat": "Personal Transfer"
+          },
+          {
+            "date": "2026-03-31",
+            "desc": "SmartQ Canteen",
+            "amount": 64,
+            "cat": "Office Food"
+          },
+          {
+            "date": "2026-03-31",
+            "desc": "SmartQ Canteen",
+            "amount": 88,
+            "cat": "Office Food"
+          },
+          {
+            "date": "2026-03-31",
+            "desc": "Uber India",
+            "amount": 45.1,
+            "cat": "Transport"
+          },
+          {
+            "date": "2026-03-31",
+            "desc": "Zomato",
+            "amount": 1,
+            "cat": "Food & Dining"
+          },
+          {
+            "date": "2026-04-01",
+            "desc": "SmartQ Canteen",
+            "amount": 40,
+            "cat": "Office Food"
+          },
+          {
+            "date": "2026-04-01",
+            "desc": "Uber India",
+            "amount": 60.32,
+            "cat": "Transport"
+          },
+          {
+            "date": "2026-04-02",
+            "desc": "Mr Shaik",
+            "amount": 60,
+            "cat": "Personal Transfer"
+          },
+          {
+            "date": "2026-04-02",
+            "desc": "SmartQ Canteen",
+            "amount": 64,
+            "cat": "Office Food"
+          },
+          {
+            "date": "2026-04-02",
+            "desc": "SmartQ Canteen",
+            "amount": 60,
+            "cat": "Office Food"
+          },
+          {
+            "date": "2026-04-02",
+            "desc": "Uber India",
+            "amount": 45.07,
+            "cat": "Transport"
+          },
+          {
+            "date": "2026-04-02",
+            "desc": "Mr Lakha",
+            "amount": 30,
+            "cat": "Personal Transfer"
+          },
+          {
+            "date": "2026-04-02",
+            "desc": "Mr Digan (Self)",
+            "amount": 11500,
+            "cat": "Self Transfer"
+          },
+          {
+            "date": "2026-04-03",
+            "desc": "Mood Esw",
+            "amount": 40,
+            "cat": "Personal Transfer"
+          },
+          {
+            "date": "2026-04-03",
+            "desc": "SmartQ Canteen",
+            "amount": 190,
+            "cat": "Office Food"
+          },
+          {
+            "date": "2026-04-03",
+            "desc": "Meesala",
+            "amount": 40,
+            "cat": "Personal Transfer"
+          },
+          {
+            "date": "2026-04-04",
+            "desc": "Mohd Ahm",
+            "amount": 270,
+            "cat": "Personal Transfer"
+          },
+          {
+            "date": "2026-04-04",
+            "desc": "Mr Md",
+            "amount": 250,
+            "cat": "Personal Transfer"
+          },
+          {
+            "date": "2026-04-04",
+            "desc": "Mohd Ahm",
+            "amount": 20,
+            "cat": "Personal Transfer"
+          },
+          {
+            "date": "2026-04-04",
+            "desc": "Suresh R",
+            "amount": 140,
+            "cat": "Personal Transfer"
+          },
+          {
+            "date": "2026-04-04",
+            "desc": "Akash",
+            "amount": 150,
+            "cat": "Personal Transfer"
+          }
+        ],
+        "insights": [
+          {
+            "icon": "🏢",
+            "title": "High Office Food Frequency",
+            "body": "You have 8 transactions at SmartQ Canteen totaling 641.00. This suggests a daily habit of eating at the office cafeteria, with a peak spend of 190.00 on 2026-04-03.",
+            "badge": "Pattern",
+            "color": "#3b82f6"
+          },
+          {
+            "icon": "🔄",
+            "title": "Significant Self-Transfer",
+            "body": "A large transfer of 11,500.00 was made to your own account (Mr Digan) on 2026-04-02. This was the single largest debit in this period, accounting for over 75% of total outflows.",
+            "badge": "Spike",
+            "color": "#ef4444"
+          },
+          {
+            "icon": "👥",
+            "title": "Frequent Peer-to-Peer Transfers",
+            "body": "There are 16 personal transfers to various individuals totaling 2,380.00. This indicates a high volume of informal settlements or bill splitting, particularly with Mohd Ahm.",
+            "badge": "Pattern",
+            "color": "#8b5cf6"
+          },
+          {
+            "icon": "🚗",
+            "title": "Regular Commute via Uber",
+            "body": "You used Uber 3 times between Mar 31 and Apr 02, spending a total of 150.49. The average cost per ride is approximately 50.00, likely for short-distance commuting.",
+            "badge": "Pattern",
+            "color": "#10b981"
+          },
+          {
+            "icon": "⚠️",
+            "title": "Critical Liquidity Dip",
+            "body": "Your account balance dropped to a low of 28.62 on 2026-04-02 following the large self-transfer. It was quickly replenished by a 12,000.00 credit on the same day.",
+            "badge": "Review",
+            "color": "#f59e0b"
+          },
+          {
+            "icon": "💰",
+            "title": "Recurring Small Credits",
+            "body": "You received 5 separate credits of exactly 500.00 each during this period. These likely represent recurring small reimbursements or pocket money from the same source.",
+            "badge": "Pattern",
+            "color": "#6366f1"
+          },
+          {
+            "icon": "📱",
+            "title": "Digital Subscription",
+            "body": "A small payment of 15.00 was made to Google Play on 2026-03-30. This is likely a low-cost monthly app subscription or cloud storage fee.",
+            "badge": "Fixed",
+            "color": "#ec4899"
+          }
+        ]
+      },
+      "created_at": "2026-04-25T19:51:48.601Z"
+    },
+    {
+      "id": "1ffe970a-9b39-4040-a2f9-015cbca57088",
+      "period": "13 Mar – 12 Apr 2026",
+      "bank": "ICICI Bank",
+      "account_holder": "DIGANTA BISWAS",
+      "total_spent": 28905.590000000004,
+      "transaction_count": 22,
+      "data": {
+        "id": "1ffe970a-9b39-4040-a2f9-015cbca57088",
+        "period": "13 Mar – 12 Apr 2026",
+        "bank": "ICICI Bank",
+        "account_holder": "DIGANTA BISWAS",
+        "opening_balance": 21572.99,
+        "closing_balance": 28721.59,
+        "total_credits": 21756.99,
+        "transactions": [
+          {
+            "date": "2026-03-17",
+            "desc": "Amazon Pay Ecommerce Bangalore",
+            "amount": 17626,
+            "cat": "Shopping"
+          },
+          {
+            "date": "2026-03-21",
+            "desc": "Jio Mumbai",
+            "amount": 470.82,
+            "cat": "Bills & Subscriptions"
+          },
+          {
+            "date": "2026-03-24",
+            "desc": "Jio Mumbai",
+            "amount": 349,
+            "cat": "Bills & Subscriptions"
+          },
+          {
+            "date": "2026-03-25",
+            "desc": "Bharti Airtel Ltd Gurgaon",
+            "amount": 1029,
+            "cat": "Bills & Subscriptions"
+          },
+          {
+            "date": "2026-03-27",
+            "desc": "Dreamplug Technologies Bangalore",
+            "amount": 197,
+            "cat": "Other"
+          },
+          {
+            "date": "2026-03-29",
+            "desc": "Zomato Ltd Bangalore",
+            "amount": 191.32,
+            "cat": "Food & Dining"
+          },
+          {
+            "date": "2026-03-30",
+            "desc": "Amazon Pay Grocery Bangalore",
+            "amount": 105,
+            "cat": "Groceries"
+          },
+          {
+            "date": "2026-03-31",
+            "desc": "Zomato New Delhi",
+            "amount": 222.33,
+            "cat": "Food & Dining"
+          },
+          {
+            "date": "2026-04-03",
+            "desc": "Amazon Pay Ecommerce Bangalore",
+            "amount": 507,
+            "cat": "Shopping"
+          },
+          {
+            "date": "2026-04-03",
+            "desc": "Amazon Pay Ecommerce Bangalore",
+            "amount": 694,
+            "cat": "Shopping"
+          },
+          {
+            "date": "2026-04-03",
+            "desc": "Vodafone Idea Limited Gurgaon",
+            "amount": 489,
+            "cat": "Bills & Subscriptions"
+          },
+          {
+            "date": "2026-04-05",
+            "desc": "Swiggy Limited Bangalore",
+            "amount": 274,
+            "cat": "Food & Dining"
+          },
+          {
+            "date": "2026-04-06",
+            "desc": "EMI Interest Amazon Seller Services",
+            "amount": 124.67,
+            "cat": "Other"
+          },
+          {
+            "date": "2026-04-06",
+            "desc": "IGST on EMI Interest",
+            "amount": 22.44,
+            "cat": "Other"
+          },
+          {
+            "date": "2026-04-06",
+            "desc": "EMI Principal Amazon Seller Services",
+            "amount": 4647.06,
+            "cat": "Other"
+          },
+          {
+            "date": "2026-04-06",
+            "desc": "Amazon Pay Grocery Bangalore",
+            "amount": 143,
+            "cat": "Groceries"
+          },
+          {
+            "date": "2026-04-07",
+            "desc": "Zomato New Delhi",
+            "amount": 212.88,
+            "cat": "Food & Dining"
+          },
+          {
+            "date": "2026-04-09",
+            "desc": "Amazon Pay Grocery Bangalore",
+            "amount": 366.95,
+            "cat": "Groceries"
+          },
+          {
+            "date": "2026-04-11",
+            "desc": "EMI Interest Travelogy Online",
+            "amount": 69.56,
+            "cat": "Other"
+          },
+          {
+            "date": "2026-04-11",
+            "desc": "IGST on EMI Interest",
+            "amount": 12.52,
+            "cat": "Other"
+          },
+          {
+            "date": "2026-04-11",
+            "desc": "EMI Principal Travelogy Online",
+            "amount": 900.04,
+            "cat": "Other"
+          },
+          {
+            "date": "2026-04-11",
+            "desc": "Swiggy Limited Bangalore",
+            "amount": 252,
+            "cat": "Food & Dining"
+          }
+        ],
+        "insights": [
+          {
+            "icon": "🛍️",
+            "title": "Major Shopping Expense",
+            "body": "A single transaction of 17,626.00 at Amazon on 17th March accounts for over 60% of your total monthly spend. This significantly impacted your credit utilization for the month.",
+            "badge": "Spike",
+            "color": "#E91E63"
+          },
+          {
+            "icon": "💳",
+            "title": "Active EMI Commitments",
+            "body": "You have two active EMIs (Amazon Seller and Travelogy) totaling 5,776.29 this month. The Amazon EMI is nearing completion with only 1 installment remaining.",
+            "badge": "Fixed",
+            "color": "#2196F3"
+          },
+          {
+            "icon": "🍔",
+            "title": "Food Delivery Frequency",
+            "body": "You ordered food 6 times this month via Zomato and Swiggy, spending a total of 1,352.53. This represents a consistent lifestyle expense pattern.",
+            "badge": "Pattern",
+            "color": "#FF9800"
+          },
+          {
+            "icon": "📱",
+            "title": "High Telecom Outflow",
+            "body": "Total spending on mobile/internet bills (Jio, Airtel, Vodafone) reached 2,337.82 across 4 transactions. Consider consolidating plans if these are for multiple personal devices.",
+            "badge": "Review",
+            "color": "#9C27B0"
+          },
+          {
+            "icon": "🛒",
+            "title": "Grocery Micro-spending",
+            "body": "You made 3 grocery purchases via Amazon Pay totaling 614.95. These are small, frequent transactions (avg. 205 per order) rather than bulk monthly shopping.",
+            "badge": "Pattern",
+            "color": "#4CAF50"
+          },
+          {
+            "icon": "✅",
+            "title": "Disciplined Repayment",
+            "body": "You paid 21,572.99 on 17th March, which exactly matches your previous month's balance. This indicates a healthy habit of paying the full amount due to avoid interest.",
+            "badge": "Pattern",
+            "color": "#009688"
+          },
+          {
+            "icon": "⚠️",
+            "title": "Low Available Credit",
+            "body": "Your available credit is down to 4,556.20 against a limit of 1,40,000.00. This is likely due to the large Amazon purchase and blocked limits for active EMIs.",
+            "badge": "High",
+            "color": "#F44336"
+          }
+        ]
+      },
+      "created_at": "2026-04-25T20:45:29.689Z"
+    }
+  ],
+  "audit_logs": [
+    {
+      "id": "1777152384859487",
+      "timestamp": "2026-04-25T21:26:24.859Z",
+      "action": "ANALYSIS_UPDATED",
+      "details": "Updated analysis 1ffe970a-9b39-4040-a2f9-015cbca57088",
+      "ip": "127.0.0.1"
+    },
+    {
+      "id": "1777152395037276",
+      "timestamp": "2026-04-25T21:26:35.037Z",
+      "action": "ADMIN_LOGIN",
+      "details": "Admin logged in successfully",
+      "ip": "127.0.0.1"
+    },
+    {
+      "id": "1777152426727290",
+      "timestamp": "2026-04-25T21:27:06.727Z",
+      "action": "ADMIN_LOGIN",
+      "details": "Admin logged in successfully",
+      "ip": "127.0.0.1"
+    }
+  ],
+  "api_usage": []
+}

@@ -3,6 +3,9 @@ import { useState, useRef, useCallback } from "react";
 export default function UploadScreen({ onAnalyze, onUseSample, isLoading, error }) {
   const [files, setFiles] = useState([]);
   const [isDragging, setIsDragging] = useState(false);
+  const [pdfPassword, setPdfPassword] = useState("");
+  const [passwordFileName, setPasswordFileName] = useState(null);
+  const [pdfPasswords, setPdfPasswords] = useState({});
   const fileInputRef = useRef(null);
 
   const handleFiles = useCallback((newFiles) => {
@@ -33,6 +36,35 @@ export default function UploadScreen({ onAnalyze, onUseSample, isLoading, error 
 
   const removeFile = (index) => {
     setFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleAnalyzeClick = () => {
+    onAnalyze(files, pdfPasswords);
+  };
+
+  const handlePasswordSubmit = () => {
+    if (pdfPassword && passwordFileName) {
+      const updatedPasswords = { ...pdfPasswords, [passwordFileName]: pdfPassword };
+      setPdfPasswords(updatedPasswords);
+      setPdfPassword("");
+      setPasswordFileName(null);
+      // Re-trigger analysis with the new password
+      onAnalyze(files, updatedPasswords);
+    }
+  };
+
+  // Detect password error from parent
+  const showPasswordPrompt = error && (
+    error.includes("password-protected") || 
+    error.includes("PDF_PASSWORD_REQUIRED") ||
+    error.includes("PDF_PASSWORD_INCORRECT") ||
+    error.includes("Incorrect password")
+  );
+
+  // Extract filename from error message
+  const extractFileName = (errMsg) => {
+    const match = errMsg?.match(/"([^"]+)"/);
+    return match ? match[1] : "the PDF";
   };
 
   return (
@@ -69,6 +101,10 @@ export default function UploadScreen({ onAnalyze, onUseSample, isLoading, error 
         .file-remove:hover {
           background: #f87171 !important;
           color: #fff !important;
+        }
+        .pwd-input:focus {
+          border-color: #fbbf24 !important;
+          box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.2);
         }
       `}</style>
 
@@ -127,6 +163,9 @@ export default function UploadScreen({ onAnalyze, onUseSample, isLoading, error 
               <div style={styles.dropSub}>
                 or click to browse · supports PDF, PNG, JPG, WEBP
               </div>
+              <div style={{ ...styles.dropSub, marginTop: 4, color: "#34d399", fontSize: 10 }}>
+                🔐 Password-protected PDFs supported
+              </div>
             </div>
           ) : (
             <div style={styles.previewGrid} onClick={(e) => e.stopPropagation()}>
@@ -134,7 +173,7 @@ export default function UploadScreen({ onAnalyze, onUseSample, isLoading, error 
                 <div key={i} style={styles.previewCard}>
                   {file.type === "application/pdf" ? (
                     <div style={{ ...styles.previewImage, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#1c1c35', color: '#fbbf24', fontSize: 32 }}>
-                      📄
+                      {pdfPasswords[file.name] ? "🔓" : "📄"}
                     </div>
                   ) : (
                     <img
@@ -171,8 +210,48 @@ export default function UploadScreen({ onAnalyze, onUseSample, isLoading, error 
           )}
         </div>
 
-        {/* Error */}
-        {error && (
+        {/* Password Prompt for Protected PDFs */}
+        {showPasswordPrompt && (
+          <div style={styles.passwordBox}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+              <span style={{ fontSize: 20 }}>🔐</span>
+              <span style={{ fontSize: 14, fontWeight: 600, color: "#fbbf24" }}>
+                Password Required
+              </span>
+            </div>
+            <p style={{ fontSize: 12, color: "#94a3b8", marginBottom: 12, lineHeight: 1.5 }}>
+              The file <strong style={{ color: "#e2e8f0" }}>{extractFileName(error)}</strong> is password-protected. Enter the password to decrypt it.
+            </p>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input
+                className="pwd-input"
+                type="password"
+                value={pdfPassword}
+                onChange={(e) => {
+                  setPdfPassword(e.target.value);
+                  if (!passwordFileName) setPasswordFileName(extractFileName(error));
+                }}
+                onKeyDown={(e) => e.key === "Enter" && handlePasswordSubmit()}
+                placeholder="Enter PDF password"
+                style={styles.passwordInput}
+              />
+              <button
+                onClick={handlePasswordSubmit}
+                disabled={!pdfPassword}
+                style={{
+                  ...styles.passwordBtn,
+                  opacity: pdfPassword ? 1 : 0.4,
+                  cursor: pdfPassword ? "pointer" : "not-allowed",
+                }}
+              >
+                Unlock & Retry
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Error (non-password) */}
+        {error && !showPasswordPrompt && (
           <div style={styles.errorBox}>
             <span style={{ flexShrink: 0 }}>⚠️</span>
             <span>{error}</span>
@@ -184,7 +263,7 @@ export default function UploadScreen({ onAnalyze, onUseSample, isLoading, error 
           <button
             className="upload-cta"
             disabled={files.length === 0 || isLoading}
-            onClick={() => onAnalyze(files)}
+            onClick={handleAnalyzeClick}
             style={{
               ...styles.ctaBtn,
               opacity: files.length === 0 || isLoading ? 0.4 : 1,
@@ -235,7 +314,11 @@ export default function UploadScreen({ onAnalyze, onUseSample, isLoading, error 
         <div style={styles.footer}>
           <div style={styles.footerItem}>
             <span>🔒</span>
-            <span>Files are sent directly to Google Gemini — nothing stored on any server</span>
+            <span>Your data is redacted before storage — personal details are never saved</span>
+          </div>
+          <div style={styles.footerItem}>
+            <span>🛡️</span>
+            <span>Account numbers, names & balances are automatically scrubbed from records</span>
           </div>
           <div style={styles.footerItem}>
             <span>⚡</span>
@@ -372,6 +455,37 @@ const styles = {
     gap: 4,
     cursor: "pointer",
     transition: "border-color 0.2s",
+  },
+  passwordBox: {
+    marginTop: 16,
+    padding: "16px 20px",
+    borderRadius: 12,
+    background: "rgba(251, 191, 36, 0.05)",
+    border: "1px solid rgba(251, 191, 36, 0.2)",
+  },
+  passwordInput: {
+    flex: 1,
+    padding: "10px 14px",
+    background: "#0a0a18",
+    border: "1px solid #2a2a50",
+    borderRadius: 8,
+    color: "#e2e8f0",
+    fontSize: 13,
+    fontFamily: "inherit",
+    outline: "none",
+    transition: "border-color 0.2s, box-shadow 0.2s",
+  },
+  passwordBtn: {
+    padding: "10px 18px",
+    background: "linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)",
+    border: "none",
+    borderRadius: 8,
+    color: "#0a0a0a",
+    fontSize: 13,
+    fontWeight: 700,
+    fontFamily: "inherit",
+    whiteSpace: "nowrap",
+    transition: "all 0.2s",
   },
   errorBox: {
     marginTop: 16,

@@ -54,11 +54,11 @@ function App() {
     }
   }, [data]);
 
-  const handleAnalyze = useCallback(async (files) => {
+  const handleAnalyze = useCallback(async (files, pdfPasswords = {}) => {
     setError(null);
     setIsLoading(true);
     try {
-      const result = await analyzeStatements(files);
+      const result = await analyzeStatements(files, pdfPasswords);
       setData(result);
       window.location.hash = "#/dashboard";
     } catch (err) {
