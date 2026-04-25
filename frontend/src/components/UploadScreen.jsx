@@ -222,7 +222,7 @@ export default function UploadScreen({ onAnalyze, onUseSample, isLoading, error 
             <p style={{ fontSize: 12, color: "#94a3b8", marginBottom: 12, lineHeight: 1.5 }}>
               The file <strong style={{ color: "#e2e8f0" }}>{extractFileName(error)}</strong> is password-protected. Enter the password to decrypt it.
             </p>
-            {(error.includes("Incorrect") || error.includes("INCORRECT")) && (
+            {(error.includes("Incorrect password") || error.includes("PDF_PASSWORD_INCORRECT")) && (
               <div style={{ color: "#ef4444", fontSize: 12, marginBottom: 12, background: "rgba(239, 68, 68, 0.1)", padding: "8px 12px", borderRadius: 6, display: "flex", alignItems: "center", gap: 6 }}>
                 <span>⚠️</span> Incorrect password. Please try again.
               </div>

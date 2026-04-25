@@ -482,6 +482,13 @@
       "action": "ADMIN_LOGIN",
       "details": "Admin logged in successfully",
       "ip": "127.0.0.1"
+    },
+    {
+      "id": "177715497451518",
+      "timestamp": "2026-04-25T22:09:34.515Z",
+      "action": "ADMIN_LOGIN",
+      "details": "Admin logged in successfully",
+      "ip": "127.0.0.1"
     }
   ],
   "api_usage": []

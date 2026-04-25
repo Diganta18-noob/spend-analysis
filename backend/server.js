@@ -178,9 +178,12 @@ app.post("/api/analyze", upload.array("files", 10), async (req, res) => {
         const imageBuffers = await convertPdfToImages(file.buffer, password);
         
         if (imageBuffers === null) {
+          const isRetry = !!password;
           return res.status(400).json({
-            error: "PDF_PASSWORD_INCORRECT",
-            message: `Incorrect password for "${file.originalname}". Please try again.`,
+            error: isRetry ? "PDF_PASSWORD_INCORRECT" : "PDF_PASSWORD_REQUIRED",
+            message: isRetry 
+              ? `Incorrect password for "${file.originalname}". Please try again.`
+              : `The file "${file.originalname}" is password-protected. Please provide the password.`,
             fileName: file.originalname,
             fileIndex: i,
           });
