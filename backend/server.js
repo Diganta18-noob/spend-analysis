@@ -50,50 +50,50 @@ const requireAdmin = (req, res, next) => {
 };
 
 
-// --- PDF Decryption Helper ---
-async function tryDecryptPdf(fileBuffer, password) {
+// --- PDF Processing Helper ---
+async function convertPdfToImages(fileBuffer, password) {
+  let doc = null;
   try {
     const cleanPassword = (password || "").trim();
-    console.log("Attempting to decrypt with mupdf, password:", cleanPassword);
+    console.log("Converting PDF to images with mupdf...");
     
-    // Load document using mupdf
-    const doc = mupdf.Document.openDocument(fileBuffer, "application/pdf");
+    doc = mupdf.Document.openDocument(fileBuffer, "application/pdf");
     
     if (doc.needsPassword()) {
-      if (!cleanPassword) {
-        throw new Error("Incorrect password");
-      }
-      const ok = doc.authenticatePassword(cleanPassword);
-      if (!ok) {
-        throw new Error("Incorrect password");
+      if (!cleanPassword || !doc.authenticatePassword(cleanPassword)) {
+        console.log("Incorrect password provided for PDF");
+        return null; // Signal: wrong password
       }
     }
     
-    // Save to unencrypted buffer
-    if (doc.saveToBuffer) {
-      const mupdfBuf = doc.saveToBuffer(""); // empty options strips encryption
-      const uint8Array = mupdfBuf.asUint8Array();
+    const count = doc.countPages();
+    const images = [];
+    
+    for (let i = 0; i < count; i++) {
+      const page = doc.loadPage(i);
+      // Render at 1.5x scale (around 108 DPI) for a balance between OCR quality and token usage
+      const pixmap = page.toPixmap([1.5, 0, 0, 1.5, 0, 0], mupdf.ColorSpace.DeviceRGB, false);
+      const png = pixmap.asPNG();
       
-      // Normalize PDF structure with pdf-lib so Gemini API doesn't complain about "no pages"
-      // This ensures the PDF is perfectly formatted for standard consumption
-      const normalizedDoc = await PDFDocument.load(uint8Array, { ignoreEncryption: true });
-      const finalBytes = await normalizedDoc.save();
+      // Convert mupdf Buffer to standard Node Buffer
+      const uint8Array = png.asUint8Array();
+      images.push(Buffer.from(uint8Array));
       
-      console.log("Decryption and normalization successful!");
-      return Buffer.from(finalBytes);
-    } else {
-      throw new Error("Not a valid PDF document for saving");
+      // Explicitly destroy objects to free WASM memory
+      png.destroy();
+      pixmap.destroy();
     }
+    
+    console.log(`Successfully converted PDF to ${images.length} images`);
+    return images;
   } catch (err) {
-    console.error("PDF Decryption Error:", err.message);
-    if (err.message?.includes("not encrypted")) {
-      throw err;
-    }
+    console.error("PDF Processing Error:", err.message);
     if (err.message?.includes("Incorrect password")) {
-      return null; // Signal: wrong password
+      return null;
     }
-    // Not a password issue, or it's an unsupported encryption — re-throw
     throw err;
+  } finally {
+    if (doc && doc.destroy) doc.destroy();
   }
 }
 
@@ -171,38 +171,29 @@ app.post("/api/analyze", upload.array("files", 10), async (req, res) => {
       const file = req.files[i];
 
       if (file.mimetype === "application/pdf") {
-        // Try loading without password first
-        try {
-          await PDFDocument.load(file.buffer, { ignoreEncryption: false });
-          // Loaded fine — not encrypted
-          processedFiles.push(file);
-        } catch (loadErr) {
-          // Likely encrypted — try with provided password
-          const password = pdfPasswords[file.originalname] || pdfPasswords[`file_${i}`];
-          if (!password) {
-            return res.status(400).json({
-              error: "PDF_PASSWORD_REQUIRED",
-              message: `The file "${file.originalname}" is password-protected. Please provide the password.`,
-              fileName: file.originalname,
-              fileIndex: i,
-            });
-          }
-
-          const decryptedBuffer = await tryDecryptPdf(file.buffer, password);
-          if (!decryptedBuffer) {
-            return res.status(400).json({
-              error: "PDF_PASSWORD_INCORRECT",
-              message: `Incorrect password for "${file.originalname}". Please try again.`,
-              fileName: file.originalname,
-              fileIndex: i,
-            });
-          }
-
-          processedFiles.push({
-            ...file,
-            buffer: decryptedBuffer,
+        // Extract password from multiple possible sources (body, json map)
+        const password = pdfPasswords[file.originalname] || pdfPasswords[`file_${i}`] || req.body[`password_${i}`] || "";
+        
+        // Convert PDF to images to guarantee Gemini compatibility and handle encryption
+        const imageBuffers = await convertPdfToImages(file.buffer, password);
+        
+        if (imageBuffers === null) {
+          return res.status(400).json({
+            error: "PDF_PASSWORD_INCORRECT",
+            message: `Incorrect password for "${file.originalname}". Please try again.`,
+            fileName: file.originalname,
+            fileIndex: i,
           });
         }
+
+        // Send each page as a PNG to Gemini
+        imageBuffers.forEach((buf, idx) => {
+          processedFiles.push({
+            originalname: `${file.originalname}_page_${idx + 1}.png`,
+            mimetype: "image/png",
+            buffer: buf,
+          });
+        });
       } else {
         processedFiles.push(file);
       }
