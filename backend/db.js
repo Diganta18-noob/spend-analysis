@@ -31,7 +31,7 @@ const apiUsageSchema = new mongoose.Schema({
   total_tokens_estimated: { type: Number, default: 0 },
   latencies:              { type: [Number], default: [] },
   errors:                 { type: [mongoose.Schema.Types.Mixed], default: [] }
-});
+}, { suppressReservedKeysWarning: true });
 
 const Analysis = mongoose.model("Analysis", analysisSchema);
 const AuditLog = mongoose.model("AuditLog", auditLogSchema);
