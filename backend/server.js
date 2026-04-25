@@ -160,6 +160,11 @@ app.put("/api/analyses/:id", async (req, res) => {
   }
 });
 
+// Health check for Render
+app.get("/", (req, res) => {
+  res.send("Expense Manager API is running!");
+});
+
 // Delete analysis (Admin)
 app.delete("/api/analyses/:id", requireAdmin, async (req, res) => {
   try {
