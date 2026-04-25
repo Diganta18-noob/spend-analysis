@@ -75,7 +75,10 @@ export default function UploadScreen({ onAnalyze, onUseSample, isLoading, error 
       <div style={styles.container}>
         {/* Hero Header */}
         <div style={styles.heroSection}>
-          <div style={styles.iconWrap}>
+          <div 
+            style={{ ...styles.iconWrap, cursor: "pointer" }}
+            onClick={() => window.location.hash = "#/admin"}
+          >
             <span style={{ fontSize: 40, animation: "float 3s ease-in-out infinite" }}>💸</span>
           </div>
           <h1 style={styles.title}>Expense Analyzer</h1>

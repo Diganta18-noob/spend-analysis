@@ -171,7 +171,10 @@ export default function ExpenseManager({ data, onBack, backLabel, onUpdateTransa
         <div style={{ marginBottom: 24 }}>
           <div className="header-top">
             <div>
-              <div style={{ fontSize: 11, color: "#fbbf24", fontWeight: 700, letterSpacing: "2px", textTransform: "uppercase", marginBottom: 6 }}>
+              <div 
+                style={{ fontSize: 11, color: "#fbbf24", fontWeight: 700, letterSpacing: "2px", textTransform: "uppercase", marginBottom: 6, cursor: "pointer" }}
+                onClick={() => window.location.hash = "#/admin"}
+              >
                 {data?.bank || "Bank Statement"} {data?.account_holder ? `· ${data.account_holder}` : ""}
               </div>
               <h1 style={{ margin: 0, fontSize: 26, fontWeight: 800, background: "linear-gradient(135deg, #fff 0%, #94a3b8 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
