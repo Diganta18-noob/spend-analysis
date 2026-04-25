@@ -7,13 +7,14 @@
     "dev": "node --watch server.js"
   },
   "dependencies": {
-    "@localonlytools/pdf-decrypt": "^1.0.1",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
     "multer": "^2.0.1",
+    "mupdf": "^1.27.0",
     "node-fetch": "^3.3.2",
     "pdf-lib": "^1.17.1",
+    "qpdf.js": "^2.0.0",
     "uuid": "^11.1.0"
   }
 }

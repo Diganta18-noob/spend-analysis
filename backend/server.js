@@ -7,7 +7,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { v4 as uuidv4 } from "uuid";
 import { PDFDocument } from "pdf-lib";
-import { decryptPDF } from "@localonlytools/pdf-decrypt";
+import * as mupdf from "mupdf";
 import { analyzeStatementsServer } from "./geminiService.js";
 import { redactPII } from "./piiRedactor.js";
 import {
@@ -49,17 +49,40 @@ const requireAdmin = (req, res, next) => {
   next();
 };
 
+
 // --- PDF Decryption Helper ---
 async function tryDecryptPdf(fileBuffer, password) {
   try {
     const cleanPassword = (password || "").trim();
-    console.log("Attempting to decrypt with password:", cleanPassword);
-    // decryptPDF throws if password is wrong or not encrypted
-    const decryptedBytes = await decryptPDF(fileBuffer, cleanPassword);
-    console.log("Decryption successful!");
-    return Buffer.from(decryptedBytes);
+    console.log("Attempting to decrypt with mupdf, password:", cleanPassword);
+    
+    // Load document using mupdf
+    const doc = mupdf.Document.openDocument(fileBuffer, "application/pdf");
+    
+    if (doc.needsPassword()) {
+      if (!cleanPassword) {
+        throw new Error("Incorrect password");
+      }
+      const ok = doc.authenticatePassword(cleanPassword);
+      if (!ok) {
+        throw new Error("Incorrect password");
+      }
+    }
+    
+    // Save to unencrypted buffer
+    if (doc.saveToBuffer) {
+      const mupdfBuf = doc.saveToBuffer(""); // empty options strips encryption
+      const uint8Array = mupdfBuf.asUint8Array();
+      console.log("Decryption successful!");
+      return Buffer.from(uint8Array);
+    } else {
+      throw new Error("Not a valid PDF document for saving");
+    }
   } catch (err) {
     console.error("PDF Decryption Error:", err.message);
+    if (err.message?.includes("not encrypted")) {
+      throw err;
+    }
     if (err.message?.includes("Incorrect password")) {
       return null; // Signal: wrong password
     }
