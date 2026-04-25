@@ -6,10 +6,10 @@ export default function UploadScreen({ onAnalyze, onUseSample, isLoading, error 
   const fileInputRef = useRef(null);
 
   const handleFiles = useCallback((newFiles) => {
-    const imageFiles = Array.from(newFiles).filter((f) =>
-      f.type.startsWith("image/")
+    const validFiles = Array.from(newFiles).filter((f) =>
+      f.type.startsWith("image/") || f.type === "application/pdf"
     );
-    setFiles((prev) => [...prev, ...imageFiles]);
+    setFiles((prev) => [...prev, ...validFiles]);
   }, []);
 
   const handleDrop = useCallback(
@@ -106,7 +106,7 @@ export default function UploadScreen({ onAnalyze, onUseSample, isLoading, error 
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*"
+            accept="image/*,application/pdf"
             multiple
             style={{ display: "none" }}
             onChange={(e) => handleFiles(e.target.files)}
@@ -122,21 +122,27 @@ export default function UploadScreen({ onAnalyze, onUseSample, isLoading, error 
                 </svg>
               </div>
               <div style={styles.dropTitle}>
-                Drop bank statement images here
+                Drop bank statement files here
               </div>
               <div style={styles.dropSub}>
-                or click to browse · supports PNG, JPG, WEBP
+                or click to browse · supports PDF, PNG, JPG, WEBP
               </div>
             </div>
           ) : (
             <div style={styles.previewGrid} onClick={(e) => e.stopPropagation()}>
               {files.map((file, i) => (
                 <div key={i} style={styles.previewCard}>
-                  <img
-                    src={URL.createObjectURL(file)}
-                    alt={file.name}
-                    style={styles.previewImage}
-                  />
+                  {file.type === "application/pdf" ? (
+                    <div style={{ ...styles.previewImage, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#1c1c35', color: '#fbbf24', fontSize: 32 }}>
+                      📄
+                    </div>
+                  ) : (
+                    <img
+                      src={URL.createObjectURL(file)}
+                      alt={file.name}
+                      style={styles.previewImage}
+                    />
+                  )}
                   <button
                     className="file-remove"
                     style={styles.removeBtn}
@@ -220,7 +226,7 @@ export default function UploadScreen({ onAnalyze, onUseSample, isLoading, error 
           <div style={styles.loadingSection}>
             <div style={styles.shimmerBar} />
             <p style={{ fontSize: 12, color: "#475569", textAlign: "center", marginTop: 12 }}>
-              Reading transactions from {files.length} image{files.length > 1 ? "s" : ""}… this may take 10–20 seconds.
+              Reading transactions from {files.length} file{files.length > 1 ? "s" : ""}… this may take 10–20 seconds.
             </p>
           </div>
         )}
@@ -229,7 +235,7 @@ export default function UploadScreen({ onAnalyze, onUseSample, isLoading, error 
         <div style={styles.footer}>
           <div style={styles.footerItem}>
             <span>🔒</span>
-            <span>Images are sent directly to Google Gemini — nothing stored on any server</span>
+            <span>Files are sent directly to Google Gemini — nothing stored on any server</span>
           </div>
           <div style={styles.footerItem}>
             <span>⚡</span>

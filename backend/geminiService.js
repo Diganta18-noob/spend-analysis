@@ -2,8 +2,8 @@ import fetch from "node-fetch";
 
 const AI_PROMPT = `You are an expert financial analyst specialising in personal bank statement analysis for Indian users.
 
-The user has uploaded one or more photos of their bank account statement. Your task is to:
-1. Carefully read every transaction visible in the images
+The user has uploaded one or more photos or PDF documents of their bank account statement. Your task is to:
+1. Carefully read every transaction visible in the provided documents
 2. Extract ALL debit/expense transactions (ignore credits/deposits)
 3. Categorise each transaction intelligently into one of these categories:
    - Rent, Insurance, Food & Dining, Office Food, Transport, Groceries, Bills & Subscriptions, Personal Transfer, Self Transfer, Entertainment, Shopping, Healthcare, Education, Other
