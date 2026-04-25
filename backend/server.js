@@ -73,14 +73,14 @@ async function convertPdfToImages(fileBuffer, password) {
       const page = doc.loadPage(i);
       // Render at 1.5x scale (around 108 DPI) for a balance between OCR quality and token usage
       const pixmap = page.toPixmap([1.5, 0, 0, 1.5, 0, 0], mupdf.ColorSpace.DeviceRGB, false);
-      const png = pixmap.asPNG();
       
-      // Convert mupdf Buffer to standard Node Buffer
-      const uint8Array = png.asUint8Array();
-      images.push(Buffer.from(uint8Array));
+      // pixmap.asPNG() returns a Uint8Array directly in this environment
+      const pngUint8 = pixmap.asPNG();
+      
+      // Convert to standard Node Buffer for consistency
+      images.push(Buffer.from(pngUint8));
       
       // Explicitly destroy objects to free WASM memory
-      png.destroy();
       pixmap.destroy();
     }
     
