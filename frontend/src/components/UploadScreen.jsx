@@ -4,7 +4,6 @@ export default function UploadScreen({ onAnalyze, onUseSample, isLoading, error 
   const [files, setFiles] = useState([]);
   const [isDragging, setIsDragging] = useState(false);
   const [pdfPassword, setPdfPassword] = useState("");
-  const [passwordFileName, setPasswordFileName] = useState(null);
   const [pdfPasswords, setPdfPasswords] = useState({});
   const fileInputRef = useRef(null);
 
@@ -42,12 +41,18 @@ export default function UploadScreen({ onAnalyze, onUseSample, isLoading, error 
     onAnalyze(files, pdfPasswords);
   };
 
+  // Extract filename from error message
+  const extractFileName = (errMsg) => {
+    const match = errMsg?.match(/"([^"]+)"/);
+    return match ? match[1] : "the PDF";
+  };
+
   const handlePasswordSubmit = () => {
-    if (pdfPassword && passwordFileName) {
-      const updatedPasswords = { ...pdfPasswords, [passwordFileName]: pdfPassword };
+    const fileName = extractFileName(error);
+    if (pdfPassword && fileName) {
+      const updatedPasswords = { ...pdfPasswords, [fileName]: pdfPassword };
       setPdfPasswords(updatedPasswords);
       setPdfPassword("");
-      setPasswordFileName(null);
       // Re-trigger analysis with the new password
       onAnalyze(files, updatedPasswords);
     }
@@ -61,11 +66,6 @@ export default function UploadScreen({ onAnalyze, onUseSample, isLoading, error 
     error.includes("Incorrect password")
   );
 
-  // Extract filename from error message
-  const extractFileName = (errMsg) => {
-    const match = errMsg?.match(/"([^"]+)"/);
-    return match ? match[1] : "the PDF";
-  };
 
   return (
     <div style={styles.root}>
@@ -227,10 +227,7 @@ export default function UploadScreen({ onAnalyze, onUseSample, isLoading, error 
                 className="pwd-input"
                 type="password"
                 value={pdfPassword}
-                onChange={(e) => {
-                  setPdfPassword(e.target.value);
-                  if (!passwordFileName) setPasswordFileName(extractFileName(error));
-                }}
+                onChange={(e) => setPdfPassword(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handlePasswordSubmit()}
                 placeholder="Enter PDF password"
                 style={styles.passwordInput}
