@@ -171,8 +171,8 @@ app.delete("/api/analyses/:id", requireAdmin, async (req, res) => {
 });
 
 initDb().then(() => {
-  app.listen(port, () => {
-    console.log(`Backend server running on http://localhost:${port}`);
+  app.listen(port, "0.0.0.0", () => {
+    console.log(`Backend server running on port ${port}`);
   });
 }).catch(err => {
   console.error("Failed to initialize database:", err);
