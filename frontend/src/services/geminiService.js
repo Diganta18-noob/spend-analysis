@@ -8,13 +8,14 @@ const API_BASE = import.meta.env.VITE_API_URL || "/api";
  */
 export async function analyzeStatements(files, pdfPasswords = {}) {
   const formData = new FormData();
-  for (const file of files) {
-    formData.append("files", file);
-  }
 
   // Send PDF passwords as JSON if any were provided
   if (Object.keys(pdfPasswords).length > 0) {
     formData.append("pdfPasswords", JSON.stringify(pdfPasswords));
+  }
+
+  for (const file of files) {
+    formData.append("files", file);
   }
 
   const response = await fetch(`${API_BASE}/analyze`, {

@@ -7,6 +7,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { v4 as uuidv4 } from "uuid";
 import { PDFDocument } from "pdf-lib";
+import { decryptPDF } from "@localonlytools/pdf-decrypt";
 import { analyzeStatementsServer } from "./geminiService.js";
 import { redactPII } from "./piiRedactor.js";
 import {
@@ -51,20 +52,22 @@ const requireAdmin = (req, res, next) => {
 // --- PDF Decryption Helper ---
 async function tryDecryptPdf(fileBuffer, password) {
   try {
-    const pdfDoc = await PDFDocument.load(fileBuffer, {
-      password: password || undefined,
-      ignoreEncryption: false,
-    });
-    // Successfully loaded — re-save as unencrypted buffer
-    const decryptedBytes = await pdfDoc.save();
+    // decryptPDF throws if password is wrong or not encrypted
+    const decryptedBytes = await decryptPDF(fileBuffer, password || "");
     return Buffer.from(decryptedBytes);
   } catch (err) {
+    console.error("PDF Decryption Error:", err.message);
+    if (err.message?.includes("not encrypted")) {
+      throw err;
+    }
     if (
+      err.message?.includes("Incorrect password") ||
       err.message?.includes("password") ||
       err.message?.includes("encrypted") ||
-      err.message?.includes("decrypt")
+      err.message?.includes("decrypt") ||
+      err.message?.includes("Encryption")
     ) {
-      return null; // Signal: needs password
+      return null; // Signal: needs password or wrong password
     }
     // Not a password issue — re-throw
     throw err;
