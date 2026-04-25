@@ -1,104 +1,126 @@
-import { fileURLToPath } from "url";
-import path from "path";
-import fs from "fs";
+import mongoose from "mongoose";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// ────────────────────────────── Schemas ──────────────────────────────
 
-// Ensure data directory exists
-const dataDir = path.join(__dirname, "data");
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
-}
+const analysisSchema = new mongoose.Schema({
+  id:                { type: String, required: true, unique: true },
+  period:            String,
+  bank:              String,
+  account_holder:    String,
+  total_spent:       Number,
+  transaction_count: Number,
+  is_redacted:       Boolean,
+  data:              mongoose.Schema.Types.Mixed,   // full transaction payload
+  created_at:        { type: Date, default: Date.now }
+});
 
-const dbFile = path.join(dataDir, "expense.json");
+const auditLogSchema = new mongoose.Schema({
+  id:        { type: String, required: true },
+  timestamp: { type: Date, default: Date.now },
+  action:    String,
+  details:   String,
+  ip:        String
+});
 
-let db = { analyses: [], audit_logs: [], api_usage: [] };
+const apiUsageSchema = new mongoose.Schema({
+  date:                   { type: String, required: true, unique: true },
+  provider:               { type: String, default: "gemini" },
+  total_calls:            { type: Number, default: 0 },
+  successful_calls:       { type: Number, default: 0 },
+  failed_calls:           { type: Number, default: 0 },
+  total_tokens_estimated: { type: Number, default: 0 },
+  latencies:              { type: [Number], default: [] },
+  errors:                 { type: [mongoose.Schema.Types.Mixed], default: [] }
+});
+
+const Analysis = mongoose.model("Analysis", analysisSchema);
+const AuditLog = mongoose.model("AuditLog", auditLogSchema);
+const ApiUsage = mongoose.model("ApiUsage", apiUsageSchema);
+
+// ────────────────────────────── Init ──────────────────────────────
 
 export async function initDb() {
-  if (fs.existsSync(dbFile)) {
-    try {
-      db = JSON.parse(fs.readFileSync(dbFile, "utf8"));
-      if (!db.audit_logs) db.audit_logs = [];
-      if (!db.api_usage) db.api_usage = [];
-    } catch (e) {
-      console.error("Failed to parse db JSON", e);
-    }
-  } else {
-    saveDb();
+  const uri = process.env.MONGODB_URI;
+  if (!uri) {
+    console.error("⚠️  MONGODB_URI not set – database will NOT persist!");
+    return;
+  }
+  try {
+    await mongoose.connect(uri);
+    console.log("✅ Connected to MongoDB Atlas");
+  } catch (err) {
+    console.error("❌ MongoDB connection failed:", err.message);
   }
 }
 
-function saveDb() {
-  fs.writeFileSync(dbFile, JSON.stringify(db, null, 2), "utf8");
-}
+// ────────────────────────── Analyses ──────────────────────────
 
 export async function insertAnalysis(analysis) {
-  db.analyses.push({
+  await Analysis.create({
     ...analysis,
-    created_at: new Date().toISOString()
+    created_at: new Date()
   });
-  saveDb();
 }
 
 export async function getAllAnalyses() {
-  return db.analyses
-    .map(a => ({
-      id: a.id,
-      created_at: a.created_at,
-      period: a.period,
-      bank: a.bank,
-      account_holder: a.account_holder,
-      total_spent: a.total_spent,
-      transaction_count: a.transaction_count,
-      is_redacted: a.is_redacted
-    }))
-    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  const docs = await Analysis.find({})
+    .select("id created_at period bank account_holder total_spent transaction_count is_redacted")
+    .sort({ created_at: -1 })
+    .lean();
+
+  return docs.map(a => ({
+    id: a.id,
+    created_at: a.created_at,
+    period: a.period,
+    bank: a.bank,
+    account_holder: a.account_holder,
+    total_spent: a.total_spent,
+    transaction_count: a.transaction_count,
+    is_redacted: a.is_redacted
+  }));
 }
 
 export async function getAnalysisById(id) {
-  return db.analyses.find(a => a.id === id);
+  return Analysis.findOne({ id }).lean();
 }
 
 export async function updateAnalysis(id, data) {
-  const index = db.analyses.findIndex(a => a.id === id);
-  if (index !== -1) {
-    const totalSpent = (data.transactions || [])
-      .filter(t => t.cat !== "Self Transfer")
-      .reduce((s, t) => s + t.amount, 0);
-      
-    db.analyses[index].data = data;
-    db.analyses[index].total_spent = totalSpent;
-    db.analyses[index].transaction_count = (data.transactions || []).length;
-    saveDb();
-  }
+  const totalSpent = (data.transactions || [])
+    .filter(t => t.cat !== "Self Transfer")
+    .reduce((s, t) => s + t.amount, 0);
+
+  await Analysis.updateOne({ id }, {
+    $set: {
+      data,
+      total_spent: totalSpent,
+      transaction_count: (data.transactions || []).length
+    }
+  });
 }
 
 export async function deleteAnalysis(id) {
-  db.analyses = db.analyses.filter(a => a.id !== id);
-  saveDb();
+  await Analysis.deleteOne({ id });
 }
 
 export async function getStats() {
-  const total_analyses = db.analyses.length;
-  const total_spend_tracked = db.analyses.reduce((sum, a) => sum + (a.total_spent || 0), 0);
-  const total_transactions = db.analyses.reduce((sum, a) => sum + (a.transaction_count || 0), 0);
+  const analyses = await Analysis.find({})
+    .select("total_spent transaction_count bank")
+    .lean();
+
+  const total_analyses = analyses.length;
+  const total_spend_tracked = analyses.reduce((sum, a) => sum + (a.total_spent || 0), 0);
+  const total_transactions = analyses.reduce((sum, a) => sum + (a.transaction_count || 0), 0);
   const avg_transactions = total_analyses > 0 ? total_transactions / total_analyses : 0;
-  
+
   const bankCounts = {};
-  db.analyses.forEach(a => {
-    if (a.bank) {
-      bankCounts[a.bank] = (bankCounts[a.bank] || 0) + 1;
-    }
+  analyses.forEach(a => {
+    if (a.bank) bankCounts[a.bank] = (bankCounts[a.bank] || 0) + 1;
   });
-  
+
   let top_bank = "N/A";
   let maxCount = 0;
   for (const [bank, count] of Object.entries(bankCounts)) {
-    if (count > maxCount) {
-      maxCount = count;
-      top_bank = bank;
-    }
+    if (count > maxCount) { maxCount = count; top_bank = bank; }
   }
 
   return {
@@ -110,77 +132,59 @@ export async function getStats() {
   };
 }
 
-// --- AUDIT LOGS ---
+// ────────────────────────── Audit Logs ──────────────────────────
+
 export async function insertAuditLog({ action, details, ip }) {
-  db.audit_logs.push({
+  await AuditLog.create({
     id: Date.now().toString() + Math.floor(Math.random() * 1000),
-    timestamp: new Date().toISOString(),
+    timestamp: new Date(),
     action,
     details,
     ip
   });
-  saveDb();
 }
 
 export async function getAuditLogs(limit = 50, offset = 0) {
-  const sorted = [...db.audit_logs].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-  return {
-    logs: sorted.slice(offset, offset + limit),
-    total: sorted.length
-  };
+  const [logs, total] = await Promise.all([
+    AuditLog.find({}).sort({ timestamp: -1 }).skip(offset).limit(limit).lean(),
+    AuditLog.countDocuments()
+  ]);
+  return { logs, total };
 }
 
-// --- API USAGE ---
+// ────────────────────────── API Usage ──────────────────────────
+
 export async function recordApiCall({ success, latency, tokens, error, provider = "gemini" }) {
   const dateStr = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
-  
-  // Initialize today if not exists
-  let todayRecord = db.api_usage.find(u => u.date === dateStr);
-  if (!todayRecord) {
-    todayRecord = {
-      date: dateStr,
-      provider,
-      total_calls: 0,
-      successful_calls: 0,
-      failed_calls: 0,
-      total_tokens_estimated: 0,
-      latencies: [],
-      errors: []
-    };
-    db.api_usage.push(todayRecord);
-  }
 
-  todayRecord.total_calls++;
+  // Upsert today's record
+  const update = {
+    $inc: {
+      total_calls: 1,
+      ...(success ? { successful_calls: 1 } : { failed_calls: 1 }),
+      ...(success ? { total_tokens_estimated: tokens || 0 } : {})
+    },
+    $setOnInsert: { date: dateStr, provider }
+  };
+
   if (success) {
-    todayRecord.successful_calls++;
-    todayRecord.latencies.push(latency);
-    todayRecord.total_tokens_estimated += (tokens || 0);
+    update.$push = { latencies: { $each: [latency], $slice: -100 } };
   } else {
-    todayRecord.failed_calls++;
-    todayRecord.errors.push({ time: new Date().toISOString(), message: error });
+    update.$push = { errors: { $each: [{ time: new Date().toISOString(), message: error }], $slice: -50 } };
   }
 
-  // Keep latencies array from growing unbounded per day
-  if (todayRecord.latencies.length > 100) {
-    todayRecord.latencies.shift(); 
-  }
-
-  saveDb();
+  await ApiUsage.updateOne({ date: dateStr }, update, { upsert: true });
 }
 
 export async function getApiUsage() {
-  // Aggregate last 30 days
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   const cutoff = thirtyDaysAgo.toISOString().split("T")[0];
 
-  const recentUsage = db.api_usage.filter(u => u.date >= cutoff).sort((a, b) => a.date.localeCompare(b.date));
-  
-  let totalCalls = 0;
-  let successfulCalls = 0;
-  let failedCalls = 0;
-  let allLatencies = [];
-  let totalTokens = 0;
+  const recentUsage = await ApiUsage.find({ date: { $gte: cutoff } }).sort({ date: 1 }).lean();
+
+  let totalCalls = 0, successfulCalls = 0, failedCalls = 0, totalTokens = 0;
+  const allLatencies = [];
 
   recentUsage.forEach(u => {
     totalCalls += u.total_calls;
@@ -190,7 +194,9 @@ export async function getApiUsage() {
     allLatencies.push(...u.latencies);
   });
 
-  const avgLatency = allLatencies.length > 0 ? allLatencies.reduce((a, b) => a + b, 0) / allLatencies.length : 0;
+  const avgLatency = allLatencies.length > 0
+    ? allLatencies.reduce((a, b) => a + b, 0) / allLatencies.length
+    : 0;
 
   return {
     daily: recentUsage,

@@ -6,7 +6,6 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { v4 as uuidv4 } from "uuid";
-import { PDFDocument } from "pdf-lib";
 import * as mupdf from "mupdf";
 import { analyzeStatementsServer } from "./geminiService.js";
 import { redactPII } from "./piiRedactor.js";
