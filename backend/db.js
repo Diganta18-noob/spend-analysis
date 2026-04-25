@@ -1,5 +1,3 @@
-import sqlite3 from "sqlite3";
-import { open } from "sqlite";
 import { fileURLToPath } from "url";
 import path from "path";
 import fs from "fs";
@@ -13,113 +11,98 @@ if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
 }
 
-let db;
+const dbFile = path.join(dataDir, "expense.json");
+
+let db = { analyses: [] };
 
 export async function initDb() {
-  db = await open({
-    filename: path.join(dataDir, "expense.db"),
-    driver: sqlite3.Database,
-  });
-
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS analyses (
-      id TEXT PRIMARY KEY,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      period TEXT,
-      bank TEXT,
-      account_holder TEXT,
-      total_spent REAL DEFAULT 0,
-      transaction_count INTEGER DEFAULT 0,
-      data TEXT NOT NULL
-    );
-  `);
-  
-  return db;
-}
-
-/**
- * Insert a new analysis into the database.
- */
-export async function insertAnalysis({ id, period, bank, account_holder, total_spent, transaction_count, data }) {
-  const stmt = await db.prepare(`
-    INSERT INTO analyses (id, period, bank, account_holder, total_spent, transaction_count, data)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `);
-  await stmt.run(id, period, bank, account_holder, total_spent, transaction_count, JSON.stringify(data));
-  await stmt.finalize();
-}
-
-/**
- * Get all analyses (summary only, no full data blob).
- */
-export async function getAllAnalyses() {
-  return await db.all(`
-    SELECT id, created_at, period, bank, account_holder, total_spent, transaction_count
-    FROM analyses
-    ORDER BY created_at DESC
-  `);
-}
-
-/**
- * Get a single analysis by ID (includes full data).
- */
-export async function getAnalysisById(id) {
-  const row = await db.get("SELECT * FROM analyses WHERE id = ?", id);
-  if (row) {
-    row.data = JSON.parse(row.data);
+  if (fs.existsSync(dbFile)) {
+    try {
+      db = JSON.parse(fs.readFileSync(dbFile, "utf8"));
+    } catch (e) {
+      console.error("Failed to parse db JSON", e);
+    }
+  } else {
+    saveDb();
   }
-  return row;
 }
 
-/**
- * Update an analysis (e.g. after category edits).
- */
+function saveDb() {
+  fs.writeFileSync(dbFile, JSON.stringify(db, null, 2), "utf8");
+}
+
+export async function insertAnalysis(analysis) {
+  db.analyses.push({
+    ...analysis,
+    created_at: new Date().toISOString()
+  });
+  saveDb();
+}
+
+export async function getAllAnalyses() {
+  return db.analyses
+    .map(a => ({
+      id: a.id,
+      created_at: a.created_at,
+      period: a.period,
+      bank: a.bank,
+      account_holder: a.account_holder,
+      total_spent: a.total_spent,
+      transaction_count: a.transaction_count
+    }))
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+}
+
+export async function getAnalysisById(id) {
+  return db.analyses.find(a => a.id === id);
+}
+
 export async function updateAnalysis(id, data) {
-  const totalSpent = (data.transactions || [])
-    .filter(t => t.cat !== "Self Transfer")
-    .reduce((s, t) => s + t.amount, 0);
-
-  const stmt = await db.prepare(`
-    UPDATE analyses
-    SET data = ?, total_spent = ?, transaction_count = ?
-    WHERE id = ?
-  `);
-  await stmt.run(JSON.stringify(data), totalSpent, (data.transactions || []).length, id);
-  await stmt.finalize();
+  const index = db.analyses.findIndex(a => a.id === id);
+  if (index !== -1) {
+    const totalSpent = (data.transactions || [])
+      .filter(t => t.cat !== "Self Transfer")
+      .reduce((s, t) => s + t.amount, 0);
+      
+    db.analyses[index].data = data;
+    db.analyses[index].total_spent = totalSpent;
+    db.analyses[index].transaction_count = (data.transactions || []).length;
+    saveDb();
+  }
 }
 
-/**
- * Delete an analysis by ID.
- */
 export async function deleteAnalysis(id) {
-  await db.run("DELETE FROM analyses WHERE id = ?", id);
+  db.analyses = db.analyses.filter(a => a.id !== id);
+  saveDb();
 }
 
-/**
- * Get aggregate stats for admin dashboard.
- */
 export async function getStats() {
-  const row = await db.get(`
-    SELECT
-      COUNT(*) as total_analyses,
-      COALESCE(SUM(total_spent), 0) as total_spend_tracked,
-      COALESCE(AVG(transaction_count), 0) as avg_transactions,
-      COALESCE(SUM(transaction_count), 0) as total_transactions
-    FROM analyses
-  `);
-
-  const topBank = await db.get(`
-    SELECT bank, COUNT(*) as cnt
-    FROM analyses
-    WHERE bank IS NOT NULL
-    GROUP BY bank
-    ORDER BY cnt DESC
-    LIMIT 1
-  `);
+  const total_analyses = db.analyses.length;
+  const total_spend_tracked = db.analyses.reduce((sum, a) => sum + (a.total_spent || 0), 0);
+  const total_transactions = db.analyses.reduce((sum, a) => sum + (a.transaction_count || 0), 0);
+  const avg_transactions = total_analyses > 0 ? total_transactions / total_analyses : 0;
+  
+  const bankCounts = {};
+  db.analyses.forEach(a => {
+    if (a.bank) {
+      bankCounts[a.bank] = (bankCounts[a.bank] || 0) + 1;
+    }
+  });
+  
+  let top_bank = "N/A";
+  let maxCount = 0;
+  for (const [bank, count] of Object.entries(bankCounts)) {
+    if (count > maxCount) {
+      maxCount = count;
+      top_bank = bank;
+    }
+  }
 
   return {
-    ...row,
-    avg_transactions: Math.round(row.avg_transactions || 0),
-    top_bank: topBank?.bank || "N/A",
+    total_analyses,
+    total_spend_tracked,
+    avg_transactions: Math.round(avg_transactions),
+    total_transactions,
+    top_bank
   };
 }
