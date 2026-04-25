@@ -54,9 +54,10 @@ export default function AdminDashboard() {
   const handleExportCSV = async () => {
     if (analyses.length === 0) return;
     
-    const headers = ["Date", "Period", "Bank", "Account Holder", "Transactions", "Total Spent"];
+    const headers = ["Date", "Time", "Period", "Bank", "Account Holder", "Transactions", "Total Spent"];
     const rows = analyses.map(a => [
       new Date(a.created_at).toLocaleDateString(),
+      new Date(a.created_at).toLocaleTimeString(),
       `"${a.period}"`,
       `"${a.bank || ''}"`,
       `"${a.account_holder || ''}"`,
@@ -212,6 +213,7 @@ export default function AdminDashboard() {
                 <thead>
                   <tr style={{ background: "rgba(0,0,0,0.2)", color: "#94a3b8" }}>
                     <th style={{ padding: "12px 20px", fontWeight: "500" }}>Date</th>
+                    <th style={{ padding: "12px 20px", fontWeight: "500" }}>Time</th>
                     <th style={{ padding: "12px 20px", fontWeight: "500" }}>Period</th>
                     <th style={{ padding: "12px 20px", fontWeight: "500" }}>Account</th>
                     <th style={{ padding: "12px 20px", fontWeight: "500" }}>Transactions</th>
@@ -225,6 +227,7 @@ export default function AdminDashboard() {
                   ) : analyses.map((a) => (
                     <tr key={a.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.02)" }}>
                       <td style={{ padding: "16px 20px", color: "#cbd5e1" }}>{new Date(a.created_at).toLocaleDateString()}</td>
+                      <td style={{ padding: "16px 20px", color: "#94a3b8", fontSize: "13px" }}>{new Date(a.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
                       <td style={{ padding: "16px 20px", color: "#94a3b8", fontSize: "13px" }}>{a.period}</td>
                       <td style={{ padding: "16px 20px" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>

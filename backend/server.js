@@ -73,8 +73,14 @@ async function tryDecryptPdf(fileBuffer, password) {
     if (doc.saveToBuffer) {
       const mupdfBuf = doc.saveToBuffer(""); // empty options strips encryption
       const uint8Array = mupdfBuf.asUint8Array();
-      console.log("Decryption successful!");
-      return Buffer.from(uint8Array);
+      
+      // Normalize PDF structure with pdf-lib so Gemini API doesn't complain about "no pages"
+      // This ensures the PDF is perfectly formatted for standard consumption
+      const normalizedDoc = await PDFDocument.load(uint8Array, { ignoreEncryption: true });
+      const finalBytes = await normalizedDoc.save();
+      
+      console.log("Decryption and normalization successful!");
+      return Buffer.from(finalBytes);
     } else {
       throw new Error("Not a valid PDF document for saving");
     }
