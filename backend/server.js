@@ -52,24 +52,18 @@ const requireAdmin = (req, res, next) => {
 // --- PDF Decryption Helper ---
 async function tryDecryptPdf(fileBuffer, password) {
   try {
+    const cleanPassword = (password || "").trim();
+    console.log("Attempting to decrypt with password:", cleanPassword);
     // decryptPDF throws if password is wrong or not encrypted
-    const decryptedBytes = await decryptPDF(fileBuffer, password || "");
+    const decryptedBytes = await decryptPDF(fileBuffer, cleanPassword);
+    console.log("Decryption successful!");
     return Buffer.from(decryptedBytes);
   } catch (err) {
     console.error("PDF Decryption Error:", err.message);
-    if (err.message?.includes("not encrypted")) {
-      throw err;
+    if (err.message?.includes("Incorrect password")) {
+      return null; // Signal: wrong password
     }
-    if (
-      err.message?.includes("Incorrect password") ||
-      err.message?.includes("password") ||
-      err.message?.includes("encrypted") ||
-      err.message?.includes("decrypt") ||
-      err.message?.includes("Encryption")
-    ) {
-      return null; // Signal: needs password or wrong password
-    }
-    // Not a password issue — re-throw
+    // Not a password issue, or it's an unsupported encryption — re-throw
     throw err;
   }
 }
