@@ -198,6 +198,11 @@ scripts/                  # Utility scripts
 - After 3 debugging failures → state dump → fresh session
 - STATE.md = memory across sessions
 
+**Persistent Memory Protocol:**
+- **Auto-Snapshot**: The agent MUST update `.gsd/STATE.md` after every significant task or every 5-10 turns.
+- **Content**: Summary of progress, critical decisions, files touched, and specific next steps.
+- **Recovery**: At the start of every session, the agent MUST read `.gsd/STATE.md` to restore context.
+
 ---
 
 ## Token Efficiency Rules

@@ -70,8 +70,8 @@ async function convertPdfToImages(fileBuffer, password) {
     
     for (let i = 0; i < count; i++) {
       const page = doc.loadPage(i);
-      // Render at 1.5x scale (around 108 DPI) for a balance between OCR quality and token usage
-      const pixmap = page.toPixmap([1.5, 0, 0, 1.5, 0, 0], mupdf.ColorSpace.DeviceRGB, false);
+      // Render at 2.0x scale (~144 DPI) for reliable OCR on text-dense bank statements
+      const pixmap = page.toPixmap([2.0, 0, 0, 2.0, 0, 0], mupdf.ColorSpace.DeviceRGB, false);
       
       // pixmap.asPNG() returns a Uint8Array directly in this environment
       const pngUint8 = pixmap.asPNG();
@@ -206,7 +206,7 @@ app.post("/api/analyze", upload.array("files", 10), async (req, res) => {
     const id = uuidv4();
     const totalSpent = (data.transactions || [])
       .filter(t => t.cat !== "Self Transfer")
-      .reduce((s, t) => s + t.amount, 0);
+      .reduce((s, t) => s + Number(t.amount || 0), 0);
 
     // Redact PII before saving to database
     const redactedData = redactPII(data);
