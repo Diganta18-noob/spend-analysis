@@ -303,6 +303,10 @@ app.get("/", (req, res) => {
   res.send("Expense Manager API is running!");
 });
 
+app.get("/api/ping", (req, res) => {
+  res.json({ status: "ok" });
+});
+
 // Delete analysis (Admin)
 app.delete("/api/analyses/:id", requireAdmin, async (req, res) => {
   const ip = getClientIp(req);

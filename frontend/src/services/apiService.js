@@ -107,3 +107,9 @@ export async function logCsvExport() {
   if (!res.ok) throw new Error("Failed to log export");
   return res.json();
 }
+// --- Server Health ---
+export async function pingServer() {
+  const res = await fetch(`${API_BASE}/ping`);
+  if (!res.ok) throw new Error("Server not responding");
+  return true;
+}

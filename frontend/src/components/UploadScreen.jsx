@@ -1,11 +1,40 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
+import { pingServer } from "../services/apiService";
 
 export default function UploadScreen({ onAnalyze, onUseSample, isLoading, error }) {
   const [files, setFiles] = useState([]);
   const [isDragging, setIsDragging] = useState(false);
   const [pdfPassword, setPdfPassword] = useState("");
   const [pdfPasswords, setPdfPasswords] = useState({});
+  const [serverStatus, setServerStatus] = useState("checking"); // checking, online, offline, waking
   const fileInputRef = useRef(null);
+
+  // Check server status on mount
+  useEffect(() => {
+    checkServer();
+  }, []);
+
+  const checkServer = async () => {
+    setServerStatus("checking");
+    try {
+      await pingServer();
+      setServerStatus("online");
+    } catch (err) {
+      setServerStatus("offline");
+    }
+  };
+
+  const wakeUpBackend = async () => {
+    setServerStatus("waking");
+    try {
+      // Pinging can take a while if it's sleeping
+      await pingServer();
+      setServerStatus("online");
+    } catch (err) {
+      setServerStatus("offline");
+      console.error("Failed to wake up server:", err);
+    }
+  };
 
   const handleFiles = useCallback((newFiles) => {
     const validFiles = Array.from(newFiles).filter((f) =>
@@ -109,6 +138,72 @@ export default function UploadScreen({ onAnalyze, onUseSample, isLoading, error 
       `}</style>
 
       <div style={styles.container}>
+        {/* Server Status Banner */}
+        <div style={{
+          marginBottom: 20,
+          padding: "10px 16px",
+          borderRadius: 12,
+          background: serverStatus === "online" ? "rgba(52, 211, 153, 0.05)" : 
+                     serverStatus === "waking" || serverStatus === "checking" ? "rgba(251, 191, 36, 0.05)" : 
+                     "rgba(248, 113, 113, 0.05)",
+          border: `1px solid ${
+            serverStatus === "online" ? "rgba(52, 211, 153, 0.2)" : 
+            serverStatus === "waking" || serverStatus === "checking" ? "rgba(251, 191, 36, 0.2)" : 
+            "rgba(248, 113, 113, 0.2)"
+          }`,
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: 12
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{
+              width: 8,
+              height: 8,
+              borderRadius: "50%",
+              background: serverStatus === "online" ? "#34d399" : 
+                         serverStatus === "waking" || serverStatus === "checking" ? "#fbbf24" : 
+                         "#f87171",
+              boxShadow: `0 0 10px ${
+                serverStatus === "online" ? "#34d399" : 
+                serverStatus === "waking" || serverStatus === "checking" ? "#fbbf24" : 
+                "#f87171"
+              }`,
+              animation: serverStatus === "waking" || serverStatus === "checking" ? "pulse-glow 1s ease-in-out infinite" : "none"
+            }} />
+            <span style={{ fontSize: 12, fontWeight: 600, color: serverStatus === "online" ? "#34d399" : "#94a3b8" }}>
+              {serverStatus === "checking" ? "Checking Server..." : 
+               serverStatus === "online" ? "Server Online" : 
+               serverStatus === "offline" ? "Server Sleeping" : 
+               "Waking Up Server (30-60s)..."}
+            </span>
+          </div>
+          
+          {serverStatus === "offline" && (
+            <button 
+              onClick={wakeUpBackend}
+              style={{
+                background: "#fbbf24",
+                border: "none",
+                borderRadius: 6,
+                padding: "4px 10px",
+                fontSize: 11,
+                fontWeight: 700,
+                color: "#0a0a0a",
+                cursor: "pointer"
+              }}
+            >
+              Wake Up Backend ⚡
+            </button>
+          )}
+          
+          {serverStatus === "online" && (
+            <span style={{ fontSize: 10, color: "#34d399", opacity: 0.8 }}>
+              Ready to Analyze
+            </span>
+          )}
+        </div>
+
         {/* Hero Header */}
         <div style={styles.heroSection}>
           <div 
@@ -264,12 +359,12 @@ export default function UploadScreen({ onAnalyze, onUseSample, isLoading, error 
         <div style={styles.actions}>
           <button
             className="upload-cta"
-            disabled={files.length === 0 || isLoading}
+            disabled={files.length === 0 || isLoading || serverStatus !== "online"}
             onClick={handleAnalyzeClick}
             style={{
               ...styles.ctaBtn,
-              opacity: files.length === 0 || isLoading ? 0.4 : 1,
-              cursor: files.length === 0 || isLoading ? "not-allowed" : "pointer",
+              opacity: files.length === 0 || isLoading || serverStatus !== "online" ? 0.4 : 1,
+              cursor: files.length === 0 || isLoading || serverStatus !== "online" ? "not-allowed" : "pointer",
             }}
           >
             {isLoading ? (
@@ -287,10 +382,18 @@ export default function UploadScreen({ onAnalyze, onUseSample, isLoading, error 
                 />
                 Analyzing with AI…
               </span>
+            ) : serverStatus !== "online" ? (
+              <>⚡ Wake Server First</>
             ) : (
               <>✨ Analyze Statements</>
             )}
           </button>
+          
+          {serverStatus !== "online" && files.length > 0 && (
+            <div style={{ fontSize: 11, color: "#fbbf24", marginTop: -4 }}>
+              Backend is currently sleeping. Click 'Wake Up' at the top to start.
+            </div>
+          )}
 
           <button
             className="sample-link"
