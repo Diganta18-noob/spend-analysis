@@ -25,15 +25,29 @@ export default function UploadScreen({ onAnalyze, onUseSample, isLoading, error 
   };
 
   const wakeUpBackend = async () => {
+    if (serverStatus === "waking") return;
     setServerStatus("waking");
-    try {
-      // Pinging can take a while if it's sleeping
-      await pingServer();
-      setServerStatus("online");
-    } catch (err) {
-      setServerStatus("offline");
-      console.error("Failed to wake up server:", err);
-    }
+    
+    // Attempt to wake up with multiple pings (Render can be slow)
+    let attempts = 0;
+    const maxAttempts = 15; // ~75 seconds total
+    
+    const poll = async () => {
+      try {
+        await pingServer();
+        setServerStatus("online");
+      } catch (err) {
+        attempts++;
+        if (attempts < maxAttempts) {
+          setTimeout(poll, 5000); // Try again in 5s
+        } else {
+          setServerStatus("offline");
+          console.error("Failed to wake up server after multiple attempts");
+        }
+      }
+    };
+    
+    poll();
   };
 
   const handleFiles = useCallback((newFiles) => {

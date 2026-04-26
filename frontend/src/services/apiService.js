@@ -109,7 +109,16 @@ export async function logCsvExport() {
 }
 // --- Server Health ---
 export async function pingServer() {
-  const res = await fetch(`${API_BASE}/ping`);
-  if (!res.ok) throw new Error("Server not responding");
-  return true;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+
+  try {
+    const res = await fetch(`${API_BASE}/ping`, { signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (!res.ok) throw new Error("Server not responding");
+    return true;
+  } catch (err) {
+    clearTimeout(timeoutId);
+    throw err;
+  }
 }
