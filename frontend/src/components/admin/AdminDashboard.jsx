@@ -215,7 +215,7 @@ export default function AdminDashboard() {
                     <th style={{ padding: "12px 20px", fontWeight: "500" }}>Date</th>
                     <th style={{ padding: "12px 20px", fontWeight: "500" }}>Time</th>
                     <th style={{ padding: "12px 20px", fontWeight: "500" }}>Period</th>
-                    <th style={{ padding: "12px 20px", fontWeight: "500" }}>Account</th>
+                    <th style={{ padding: "12px 20px", fontWeight: "500" }}>Account Holder</th>
                     <th style={{ padding: "12px 20px", fontWeight: "500" }}>Transactions</th>
                     <th style={{ padding: "12px 20px", fontWeight: "500", textAlign: "right" }}>Total Spent</th>
                     <th style={{ padding: "12px 20px", fontWeight: "500", textAlign: "center" }}>Actions</th>
@@ -230,11 +230,13 @@ export default function AdminDashboard() {
                       <td style={{ padding: "16px 20px", color: "#94a3b8", fontSize: "13px" }}>{new Date(a.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
                       <td style={{ padding: "16px 20px", color: "#94a3b8", fontSize: "13px" }}>{a.period}</td>
                       <td style={{ padding: "16px 20px" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                          <div style={{ color: "#e2e8f0" }}>{a.bank}</div>
-                          {a.is_redacted && <span style={{ fontSize: 9, color: "#34d399", background: "rgba(52,211,153,0.1)", padding: "1px 6px", borderRadius: 10 }}>🔒 Redacted</span>}
+                        <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                          <div style={{ color: "#f8fafc", fontWeight: 600, fontSize: "14px" }}>{a.account_holder && a.account_holder !== "REDACTED" ? a.account_holder : "Unknown"}</div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <span style={{ color: "#64748b", fontSize: "12px" }}>{a.bank || "—"}</span>
+                            {a.is_redacted && <span style={{ fontSize: 9, color: "#34d399", background: "rgba(52,211,153,0.1)", padding: "1px 6px", borderRadius: 10 }}>🔒 Redacted</span>}
+                          </div>
                         </div>
-                        <div style={{ color: "#64748b", fontSize: "12px" }}>{a.account_holder || "Unknown"}</div>
                       </td>
                       <td style={{ padding: "16px 20px", color: "#94a3b8" }}>{a.transaction_count}</td>
                       <td style={{ padding: "16px 20px", textAlign: "right", color: "#fca5a5", fontFamily: "DM Mono, monospace" }}>{fmt(a.total_spent)}</td>

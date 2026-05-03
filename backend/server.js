@@ -215,7 +215,7 @@ app.post("/api/analyze", upload.array("files", 10), async (req, res) => {
       id,
       period: data.period,
       bank: data.bank,
-      account_holder: redactedData.account_holder, // Store redacted name
+      account_holder: data.account_holder || null, // Store original name for admin
       total_spent: totalSpent,
       transaction_count: (data.transactions || []).length,
       data: redactedData, // Store the redacted version
@@ -274,7 +274,7 @@ app.get("/api/analyses/:id", async (req, res) => {
       details: `Viewed analysis ${req.params.id} (Bank: ${analysis.bank || "Unknown"})`,
       ip,
     });
-    res.json({ id: analysis.id, ...analysis.data });
+    res.json({ id: analysis.id, ...analysis.data, account_holder: analysis.account_holder || analysis.data?.account_holder || null });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
