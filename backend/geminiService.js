@@ -123,6 +123,8 @@ async function callGeminiModel(modelName, apiKey, imageParts, promptText, temper
     ],
     generationConfig: {
       temperature,
+      maxOutputTokens: 65536,
+      responseMimeType: "application/json",
     },
   };
 
