@@ -7,6 +7,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { v4 as uuidv4 } from "uuid";
 import * as mupdf from "mupdf";
+import sharp from "sharp";
 import { analyzeStatementsServer } from "./geminiService.js";
 import { redactPII } from "./piiRedactor.js";
 import {
@@ -70,17 +71,18 @@ async function convertPdfToImages(fileBuffer, password) {
     
     for (let i = 0; i < count; i++) {
       const page = doc.loadPage(i);
-      // Render at 2.0x scale (~144 DPI) for reliable OCR on text-dense bank statements
-      const pixmap = page.toPixmap([2.0, 0, 0, 2.0, 0, 0], mupdf.ColorSpace.DeviceRGB, false);
+      // Render at 1.5x scale (~108 DPI) — good enough for Gemini OCR, keeps file sizes small
+      const pixmap = page.toPixmap([1.5, 0, 0, 1.5, 0, 0], mupdf.ColorSpace.DeviceRGB, false);
       
-      // pixmap.asPNG() returns a Uint8Array directly in this environment
       const pngUint8 = pixmap.asPNG();
-      
-      // Convert to standard Node Buffer for consistency
-      images.push(Buffer.from(pngUint8));
-      
-      // Explicitly destroy objects to free WASM memory
       pixmap.destroy();
+      
+      // Compress PNG → JPEG (quality 75) to reduce payload size by ~70%
+      const jpegBuffer = await sharp(Buffer.from(pngUint8))
+        .jpeg({ quality: 75 })
+        .toBuffer();
+      
+      images.push(jpegBuffer);
     }
     
     console.log(`Successfully converted PDF to ${images.length} images`);
@@ -191,8 +193,8 @@ app.post("/api/analyze", upload.array("files", 10), async (req, res) => {
         // Send each page as a PNG to Gemini
         imageBuffers.forEach((buf, idx) => {
           processedFiles.push({
-            originalname: `${file.originalname}_page_${idx + 1}.png`,
-            mimetype: "image/png",
+            originalname: `${file.originalname}_page_${idx + 1}.jpg`,
+            mimetype: "image/jpeg",
             buffer: buf,
           });
         });
