@@ -18,8 +18,15 @@ export default function ApiUsageTab() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchApiUsage().then(data => { setUsage(data); setLoading(false); }).catch(() => setLoading(false));
+    loadUsage();
+    // Auto-refresh every 30 seconds so errors show up immediately
+    const interval = setInterval(loadUsage, 30000);
+    return () => clearInterval(interval);
   }, []);
+
+  const loadUsage = () => {
+    fetchApiUsage().then(data => { setUsage(data); setLoading(false); }).catch(() => setLoading(false));
+  };
 
   if (loading) return <div style={{ color: "#64748b", padding: 40, textAlign: "center" }}>Loading API usage...</div>;
   if (!usage) return <div style={{ color: "#64748b", padding: 40, textAlign: "center" }}>No API usage data yet.</div>;
@@ -87,8 +94,11 @@ export default function ApiUsageTab() {
       {/* Recent Errors */}
       {daily.some(d => d.errors?.length > 0) && (
         <div style={{ marginTop: 20, background: "#0a0a18", borderRadius: 12, border: "1px solid rgba(248,113,113,0.15)", padding: 16 }}>
-          <div style={{ fontSize: 11, color: "#f87171", textTransform: "uppercase", letterSpacing: "1.2px", fontWeight: 600, marginBottom: 10 }}>Recent Errors</div>
-          {daily.filter(d => d.errors?.length > 0).slice(-3).flatMap(d => d.errors.slice(-3).map((e, i) => (
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+            <div style={{ fontSize: 11, color: "#f87171", textTransform: "uppercase", letterSpacing: "1.2px", fontWeight: 600 }}>Recent Errors</div>
+            <button onClick={loadUsage} style={{ background: "transparent", border: "1px solid rgba(248,113,113,0.2)", color: "#f87171", fontSize: 10, padding: "3px 8px", borderRadius: 4, cursor: "pointer", fontFamily: "inherit" }}>↻ Refresh</button>
+          </div>
+          {daily.filter(d => d.errors?.length > 0).slice(-5).flatMap(d => d.errors.slice(-10).map((e, i) => (
             <div key={`${d.date}-${i}`} style={{ fontSize: 12, color: "#fca5a5", padding: "6px 0", borderBottom: "1px solid rgba(255,255,255,0.02)" }}>
               <span style={{ color: "#475569", fontFamily: "DM Mono, monospace", fontSize: 10, marginRight: 8 }}>
                 {new Date(e.time).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}

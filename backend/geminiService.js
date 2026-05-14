@@ -335,7 +335,11 @@ export async function analyzeStatementsServer(files) {
     throw error;
   } finally {
     const latency = Date.now() - startTime;
-    await recordApiCall({ success, latency, tokens: tokensEst, error: errorMsg, provider: `gemini:${usedModel}` });
+    try {
+      await recordApiCall({ success, latency, tokens: tokensEst, error: errorMsg, provider: `gemini:${usedModel}` });
+    } catch (logErr) {
+      console.error("[Gemini] Failed to record API call:", logErr.message);
+    }
   }
 }
 
