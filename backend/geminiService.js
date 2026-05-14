@@ -106,9 +106,10 @@ const MODEL_CHAIN = [
   "gemini-1.5-pro",
 ];
 
-async function callGeminiModel(modelName, apiKey, imageParts, promptText, temperature) {
-  // Use v1beta as it seems most compatible with this project's models
-  const apiVersion = "v1beta";
+// Try both API versions — some regions/models only work on one
+const API_VERSIONS = ["v1beta", "v1"];
+
+async function callGeminiModel(modelName, apiKey, imageParts, promptText, temperature, apiVersion = "v1beta") {
   const endpoint = `https://generativelanguage.googleapis.com/${apiVersion}/models/${modelName}:generateContent?key=${apiKey}`;
 
   const payload = {
@@ -145,6 +146,7 @@ async function callGeminiModel(modelName, apiKey, imageParts, promptText, temper
     err.status = response.status;
     err.isQuotaError = errorMessage.toLowerCase().includes("quota") || response.status === 429;
     err.isNotFoundError = response.status === 404;
+    err.isLocationError = errorMessage.toLowerCase().includes("user location is not supported") || errorMessage.toLowerCase().includes("location is not supported");
     throw err;
   }
 
@@ -175,6 +177,8 @@ export async function analyzeStatementsServer(files) {
   let errorMsg = null;
   let usedModel = MODEL_CHAIN[0];
 
+  let sawLocationError = false;
+
   try {
     // Try each model in the fallback chain until one works
     for (let modelIdx = 0; modelIdx < MODEL_CHAIN.length; modelIdx++) {
@@ -182,86 +186,112 @@ export async function analyzeStatementsServer(files) {
       let attempt = 0;
 
       try {
-        while (attempt <= MAX_RETRIES) {
-          const promptText = attempt === 0 ? AI_PROMPT : RETRY_PROMPT;
-          const temperature = attempt === 0 ? 0.1 : 0.2 + (attempt * 0.1);
+        // Try each API version for this model (v1beta, v1) to work around region restrictions
+        let lastVersionError = null;
+        let versionSuccess = false;
 
-          console.log(`[Gemini] Model: ${usedModel} | Attempt ${attempt + 1}/${MAX_RETRIES + 1} (temp: ${temperature})`);
-
-          const result = await callGeminiModel(usedModel, apiKey, imageParts, promptText, temperature);
-          
-          // Safety check for empty candidates (often due to safety filters)
-          if (!result?.candidates?.[0]?.content?.parts?.[0]?.text) {
-            console.error(`[Gemini] ${usedModel} returned empty response or candidate. Full response:`, JSON.stringify(result));
-            throw new Error(`Empty response from ${usedModel}`);
-          }
-
-          const text = result.candidates[0].content.parts[0].text;
-
-          const cleaned = text
-            .replace(/```json\s*/gi, "")
-            .replace(/```\s*/gi, "")
-            .trim();
-
-          let parsed;
+        for (const apiVersion of API_VERSIONS) {
+          attempt = 0;
           try {
-            parsed = JSON.parse(cleaned);
-          } catch (e) {
-            console.error(`[Gemini] Attempt ${attempt + 1} returned invalid JSON:`, text.substring(0, 200));
-            if (attempt < MAX_RETRIES) {
-              attempt++;
-              console.log(`[Gemini] Retrying due to invalid JSON...`);
+            while (attempt <= MAX_RETRIES) {
+              const promptText = attempt === 0 ? AI_PROMPT : RETRY_PROMPT;
+              const temperature = attempt === 0 ? 0.1 : 0.2 + (attempt * 0.1);
+
+              console.log(`[Gemini] Model: ${usedModel} (${apiVersion}) | Attempt ${attempt + 1}/${MAX_RETRIES + 1} (temp: ${temperature})`);
+
+              const result = await callGeminiModel(usedModel, apiKey, imageParts, promptText, temperature, apiVersion);
+              
+              // Safety check for empty candidates (often due to safety filters)
+              if (!result?.candidates?.[0]?.content?.parts?.[0]?.text) {
+                console.error(`[Gemini] ${usedModel} returned empty response or candidate. Full response:`, JSON.stringify(result));
+                throw new Error(`Empty response from ${usedModel}`);
+              }
+
+              const text = result.candidates[0].content.parts[0].text;
+
+              const cleaned = text
+                .replace(/```json\s*/gi, "")
+                .replace(/```\s*/gi, "")
+                .trim();
+
+              let parsed;
+              try {
+                parsed = JSON.parse(cleaned);
+              } catch (e) {
+                console.error(`[Gemini] Attempt ${attempt + 1} returned invalid JSON:`, text.substring(0, 200));
+                if (attempt < MAX_RETRIES) {
+                  attempt++;
+                  console.log(`[Gemini] Retrying due to invalid JSON...`);
+                  continue;
+                }
+                throw new Error("AI returned invalid JSON. Please try again.");
+              }
+
+              if (!parsed.transactions || !Array.isArray(parsed.transactions)) {
+                console.error(`[Gemini] Attempt ${attempt + 1} missing transactions array`);
+                if (attempt < MAX_RETRIES) {
+                  attempt++;
+                  continue;
+                }
+                throw new Error("Invalid response format: missing transactions array.");
+              }
+
+              // If we got 0 transactions, retry with enhanced prompt
+              if (parsed.transactions.length === 0 && attempt < MAX_RETRIES) {
+                console.warn(`[Gemini] Attempt ${attempt + 1} returned 0 transactions — retrying with enhanced prompt...`);
+                attempt++;
+                continue;
+              }
+
+              // Detect misclassification: if 100% of transactions share the same category, retry
+              if (parsed.transactions.length >= 5 && attempt < MAX_RETRIES) {
+                const catCounts = {};
+                parsed.transactions.forEach(t => { catCounts[t.cat] = (catCounts[t.cat] || 0) + 1; });
+                const maxCatCount = Math.max(...Object.values(catCounts));
+                const dominantCat = Object.keys(catCounts).find(k => catCounts[k] === maxCatCount);
+                const ratio = maxCatCount / parsed.transactions.length;
+                if (ratio >= 1.0 && dominantCat !== "Other") {
+                  console.warn(`[Gemini] Attempt ${attempt + 1}: 100% of transactions are "${dominantCat}" — likely misclassified, retrying...`);
+                  attempt++;
+                  continue;
+                }
+              }
+
+              // Final safety net: auto-fix categories if still dominated by one category
+              parsed.transactions = fixMisclassifiedCategories(parsed.transactions);
+
+              console.log(`[Gemini] ✅ Success with ${usedModel} (${apiVersion}) on attempt ${attempt + 1}: ${parsed.transactions.length} transactions extracted`);
+              success = true;
+              return parsed;
+            }
+
+            // All retries exhausted for this model+version but no fatal error — break out of version loop
+            throw new Error("Failed to extract transactions after multiple attempts.");
+
+          } catch (versionError) {
+            lastVersionError = versionError;
+            // If location error, try the next API version
+            if (versionError.isLocationError) {
+              sawLocationError = true;
+              console.warn(`[Gemini] ⚠️ Location restricted on ${usedModel} (${apiVersion}) — trying next API version...`);
               continue;
             }
-            throw new Error("AI returned invalid JSON. Please try again.");
-          }
-
-          if (!parsed.transactions || !Array.isArray(parsed.transactions)) {
-            console.error(`[Gemini] Attempt ${attempt + 1} missing transactions array`);
-            if (attempt < MAX_RETRIES) {
-              attempt++;
-              continue;
+            // If quota/404/empty, break out and try next model
+            if (versionError.isQuotaError || versionError.isNotFoundError || versionError.message.includes("Empty response")) {
+              break;
             }
-            throw new Error("Invalid response format: missing transactions array.");
+            // For other errors (bad JSON, missing transactions after all retries), stop
+            throw versionError;
           }
-
-          // If we got 0 transactions, retry with enhanced prompt
-          if (parsed.transactions.length === 0 && attempt < MAX_RETRIES) {
-            console.warn(`[Gemini] Attempt ${attempt + 1} returned 0 transactions — retrying with enhanced prompt...`);
-            attempt++;
-            continue;
-          }
-
-          // Detect misclassification: if 100% of transactions share the same category, retry
-          // Reduced sensitivity from 0.8 to 1.0 (strict) because some statements are genuinely uniform
-          if (parsed.transactions.length >= 5 && attempt < MAX_RETRIES) {
-            const catCounts = {};
-            parsed.transactions.forEach(t => { catCounts[t.cat] = (catCounts[t.cat] || 0) + 1; });
-            const maxCatCount = Math.max(...Object.values(catCounts));
-            const dominantCat = Object.keys(catCounts).find(k => catCounts[k] === maxCatCount);
-            const ratio = maxCatCount / parsed.transactions.length;
-            if (ratio >= 1.0 && dominantCat !== "Other") {
-              console.warn(`[Gemini] Attempt ${attempt + 1}: 100% of transactions are "${dominantCat}" — likely misclassified, retrying...`);
-              attempt++;
-              continue;
-            }
-          }
-
-          // Final safety net: auto-fix categories if still dominated by one category
-          parsed.transactions = fixMisclassifiedCategories(parsed.transactions);
-
-          console.log(`[Gemini] ✅ Success with ${usedModel} on attempt ${attempt + 1}: ${parsed.transactions.length} transactions extracted`);
-          success = true;
-          return parsed;
         }
 
-        // All retries exhausted for this model but no quota error — stop here
-        throw new Error("Failed to extract transactions after multiple attempts.");
+        // If we get here, all API versions failed for this model
+        if (lastVersionError) throw lastVersionError;
 
       } catch (modelError) {
-        // If it's a quota error OR an empty response OR a 404, and we have more models to try, fall back
+        // If it's a recoverable error and we have more models to try, fall back
         const canFallback = modelIdx < MODEL_CHAIN.length - 1;
-        const isTemporaryError = modelError.isQuotaError || modelError.message.includes("Empty response") || modelError.isNotFoundError;
+        const isTemporaryError = modelError.isQuotaError || modelError.message.includes("Empty response") || modelError.isNotFoundError || modelError.isLocationError;
 
         if (isTemporaryError && canFallback) {
           console.warn(`[Gemini] ⚠️ ${modelError.message} for ${usedModel} — falling back to ${MODEL_CHAIN[modelIdx + 1]}...`);
@@ -272,6 +302,10 @@ export async function analyzeStatementsServer(files) {
       }
     }
 
+    // If we exhausted all models and the last error was a location error, give a specific message
+    if (sawLocationError) {
+      throw new Error("User location is not supported for the API use. The server's region is restricted by Google. Please redeploy the backend to a supported region (e.g. US) or enable billing on your Google AI project.");
+    }
     throw new Error("All Gemini models exhausted or failed. Please try again later.");
   } catch (error) {
     errorMsg = error.message;

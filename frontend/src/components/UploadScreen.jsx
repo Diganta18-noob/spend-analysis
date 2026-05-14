@@ -109,6 +109,12 @@ export default function UploadScreen({ onAnalyze, onUseSample, isLoading, error 
     error.includes("Incorrect password")
   );
 
+  // Detect location restriction error
+  const isLocationError = error && (
+    error.toLowerCase().includes("user location is not supported") ||
+    error.toLowerCase().includes("location is not supported")
+  );
+
 
   return (
     <div style={styles.root}>
@@ -363,10 +369,32 @@ export default function UploadScreen({ onAnalyze, onUseSample, isLoading, error 
 
         {/* Error (non-password) */}
         {error && !showPasswordPrompt && (
-          <div style={styles.errorBox}>
-            <span style={{ flexShrink: 0 }}>⚠️</span>
-            <span>{error}</span>
-          </div>
+          isLocationError ? (
+            <div style={{
+              ...styles.errorBox,
+              background: "rgba(251, 191, 36, 0.08)",
+              border: "1px solid rgba(251, 191, 36, 0.25)",
+              flexDirection: "column",
+              gap: 8,
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ flexShrink: 0 }}>⚠</span>
+                <span style={{ color: "#fbbf24", fontWeight: 600 }}>User location is not supported for the API use.</span>
+              </div>
+              <div style={{ fontSize: 12, color: "#94a3b8", lineHeight: 1.6, paddingLeft: 24 }}>
+                The backend server is in a region restricted by Google's Gemini API. To fix this:
+                <ul style={{ margin: "6px 0 0 16px", padding: 0 }}>
+                  <li>Redeploy the backend to a <strong style={{ color: "#e2e8f0" }}>US region</strong> (Render → Settings → Region)</li>
+                  <li>Or <strong style={{ color: "#e2e8f0" }}>enable billing</strong> on your Google AI Studio project</li>
+                </ul>
+              </div>
+            </div>
+          ) : (
+            <div style={styles.errorBox}>
+              <span style={{ flexShrink: 0 }}>⚠️</span>
+              <span>{error}</span>
+            </div>
+          )
         )}
 
         {/* Actions */}
