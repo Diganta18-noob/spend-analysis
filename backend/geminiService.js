@@ -12,14 +12,13 @@ The user has uploaded one or more photos or PDF documents of their bank account 
 5. Produce a complete spend analysis
 
 IMPORTANT RULES:
-- Extract EVERY debit transaction visible — do not skip any
-- Look very carefully at the document — it may be a table, ledger, passbook page, UPI history, or digital statement
-- Debit transactions may be labelled as "Dr", "Debit", "DR", "Withdrawal", "Paid", negative amounts, or appear in a dedicated debit/withdrawal column
-- In tabular statements, the debit amount column may be separate from the credit column — only extract values from the debit/withdrawal column
-- If the statement has columns like "Withdrawals" and "Deposits", extract from the "Withdrawals" column
-- Some statements show amounts with "Cr" (credit) and "Dr" (debit) suffixes — only extract "Dr" entries
+- Extract EVERY debit/expense transaction visible — do not skip any
+- Look very carefully at the document — it may be a bank account ledger, or a CREDIT CARD statement.
+- FOR CREDIT CARDS: Purchases/spends are normal amounts. Payments/refunds usually have "CR" or "Cr" next to them. DO NOT extract entries marked with "CR" or "Cr".
+- FOR BANK ACCOUNTS: Debit transactions may be in a dedicated debit/withdrawal column, or have "Dr", "Debit", "Withdrawal", or "-" signs.
+- If the statement has a "STATEMENT SUMMARY" box, strictly extract the "Total Credits" / "Payments" / "Deposits" value for the `total_credits` field, and use the "Purchases/Charges" or total debits for your own reference to ensure you don't over-extract.
 - Dates should be in YYYY-MM-DD format; if year is unclear, infer from context
-- Amounts should be numeric (no currency symbols)
+- Amounts should be strictly numeric (no currency symbols or CR/DR suffixes in the JSON)
 - Vendor names should be clean and concise (max 40 chars)
 - Even if the image quality is poor, try your best to read every line item
 - If a page appears to be a continuation, still extract all visible transactions
