@@ -71,15 +71,15 @@ async function convertPdfToImages(fileBuffer, password) {
     
     for (let i = 0; i < count; i++) {
       const page = doc.loadPage(i);
-      // Render at 1.5x scale (~108 DPI) — good enough for Gemini OCR, keeps file sizes small
-      const pixmap = page.toPixmap([1.5, 0, 0, 1.5, 0, 0], mupdf.ColorSpace.DeviceRGB, false);
+      // Render at 2.0x scale (~144 DPI) for accurate OCR on text-dense bank statements
+      const pixmap = page.toPixmap([2.0, 0, 0, 2.0, 0, 0], mupdf.ColorSpace.DeviceRGB, false);
       
       const pngUint8 = pixmap.asPNG();
       pixmap.destroy();
       
-      // Compress PNG → JPEG (quality 75) to reduce payload size by ~70%
+      // Compress PNG → JPEG (quality 80) to reduce payload size by ~75% while preserving text clarity
       const jpegBuffer = await sharp(Buffer.from(pngUint8))
-        .jpeg({ quality: 75 })
+        .jpeg({ quality: 80 })
         .toBuffer();
       
       images.push(jpegBuffer);
