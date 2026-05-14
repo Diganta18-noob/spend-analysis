@@ -232,11 +232,15 @@ app.post("/api/analyze", upload.array("files", 10), async (req, res) => {
     res.json({ id, ...data });
   } catch (error) {
     console.error("Analysis error:", error);
-    await insertAuditLog({
-      action: "ANALYSIS_FAILED",
-      details: `Analysis failed: ${error.message}`,
-      ip,
-    });
+    try {
+      await insertAuditLog({
+        action: "ANALYSIS_FAILED",
+        details: `Analysis failed: ${error.message}`,
+        ip,
+      });
+    } catch (logErr) {
+      console.error("Failed to write audit log:", logErr.message);
+    }
     res.status(500).json({ error: error.message || "Failed to analyze statements" });
   }
 });
