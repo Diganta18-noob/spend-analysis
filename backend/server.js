@@ -69,17 +69,30 @@ async function convertPdfToImages(fileBuffer, password) {
     const count = doc.countPages();
     const images = [];
     
+    // Dynamically adjust scale and quality to stay under Vercel's 4.5MB payload limit
+    // (4.5MB limit = ~3.3MB binary limit due to base64 encoding)
+    let scale = 2.0;
+    let quality = 80;
+    
+    if (count > 10) {
+      scale = 1.25;
+      quality = 65;
+    } else if (count > 5) {
+      scale = 1.5;
+      quality = 70;
+    }
+    
+    console.log(`Processing ${count} pages with scale ${scale}x and JPEG quality ${quality}`);
+    
     for (let i = 0; i < count; i++) {
       const page = doc.loadPage(i);
-      // Render at 2.0x scale (~144 DPI) for accurate OCR on text-dense bank statements
-      const pixmap = page.toPixmap([2.0, 0, 0, 2.0, 0, 0], mupdf.ColorSpace.DeviceRGB, false);
+      const pixmap = page.toPixmap([scale, 0, 0, scale, 0, 0], mupdf.ColorSpace.DeviceRGB, false);
       
       const pngUint8 = pixmap.asPNG();
       pixmap.destroy();
       
-      // Compress PNG → JPEG (quality 80) to reduce payload size by ~75% while preserving text clarity
       const jpegBuffer = await sharp(Buffer.from(pngUint8))
-        .jpeg({ quality: 80 })
+        .jpeg({ quality })
         .toBuffer();
       
       images.push(jpegBuffer);
