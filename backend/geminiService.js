@@ -102,16 +102,16 @@ const MODEL_CHAIN = [
   "gemini-2.0-flash",
   "gemini-2.0-flash-lite",
   "gemini-2.5-flash-lite",
-  "gemini-1.5-flash",
-  "gemini-1.5-pro",
 ];
 
 // Try both API versions — some regions/models only work on one
 const API_VERSIONS = ["v1beta", "v1"];
 
-async function callGeminiModel(modelName, apiKey, imageParts, promptText, temperature, apiVersion = "v1beta") {
-  const endpoint = `https://generativelanguage.googleapis.com/${apiVersion}/models/${modelName}:generateContent?key=${apiKey}`;
+// Proxy URL — if set, Gemini calls go through Vercel Edge (US) instead of direct
+const GEMINI_PROXY_URL = process.env.GEMINI_PROXY_URL || "";
+const PROXY_SECRET = process.env.PROXY_SECRET || "";
 
+async function callGeminiModel(modelName, apiKey, imageParts, promptText, temperature, apiVersion = "v1beta") {
   const payload = {
     contents: [
       {
@@ -126,11 +126,28 @@ async function callGeminiModel(modelName, apiKey, imageParts, promptText, temper
     },
   };
 
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+  let response;
+
+  if (GEMINI_PROXY_URL) {
+    // Route through Vercel Edge proxy (US region) to bypass location restrictions
+    console.log(`[Gemini] Using proxy: ${GEMINI_PROXY_URL}`);
+    response = await fetch(GEMINI_PROXY_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Proxy-Token": PROXY_SECRET,
+      },
+      body: JSON.stringify({ modelName, apiVersion, payload }),
+    });
+  } else {
+    // Direct call to Google API
+    const endpoint = `https://generativelanguage.googleapis.com/${apiVersion}/models/${modelName}:generateContent?key=${apiKey}`;
+    response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  }
 
   if (!response.ok) {
     const errBody = await response.text();
@@ -297,7 +314,11 @@ export async function analyzeStatementsServer(files) {
           console.warn(`[Gemini] ⚠️ ${modelError.message} for ${usedModel} — falling back to ${MODEL_CHAIN[modelIdx + 1]}...`);
           continue;
         }
-        // Otherwise, re-throw
+        // Last model with temporary error — fall through to post-loop check
+        if (isTemporaryError && !canFallback) {
+          break;
+        }
+        // Non-temporary error — re-throw
         throw modelError;
       }
     }
