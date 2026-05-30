@@ -25,9 +25,10 @@
   --app-table-border: #0d0d1a;
   --app-toggle-bg: #1c1c38;
   --app-shimmer-bg: linear-gradient(90deg, #1c1c35 0%, rgba(251, 191, 36, 0.25) 50%, #1c1c35 100%);
+  --app-hover-bg: rgba(255, 255, 255, 0.025);
 }
 
-:root.light-mode {
+.light-mode {
   /* App Light Theme Overrides */
   --app-bg: #f8fafc;
   --app-card-bg: linear-gradient(135deg, #ffffff 0%, #f1f5f9 100%);
@@ -42,6 +43,7 @@
   --app-table-border: #e2e8f0;
   --app-toggle-bg: #cbd5e1;
   --app-shimmer-bg: linear-gradient(90deg, #e2e8f0 0%, rgba(251, 191, 36, 0.40) 50%, #e2e8f0 100%);
+  --app-hover-bg: rgba(0, 0, 0, 0.025);
 }
 
 :root {

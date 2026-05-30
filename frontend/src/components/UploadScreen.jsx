@@ -272,10 +272,10 @@ export default function UploadScreen({ onAnalyze, onUseSample, isLoading, error,
         <div
           style={{
             ...styles.dropZone,
-            borderColor: isDragging ? "#fbbf24" : files.length > 0 ? "#2a2a50" : "#1c1c35",
+            borderColor: isDragging ? "#fbbf24" : files.length > 0 ? "var(--app-border-hover)" : "var(--app-border)",
             background: isDragging
               ? "rgba(251, 191, 36, 0.04)"
-              : "linear-gradient(135deg, #0f0f1e 0%, #11111f 100%)",
+              : "var(--app-card-bg)",
             animation: files.length === 0 ? "pulse-glow 3s ease-in-out infinite" : "none",
           }}
           onDrop={handleDrop}
