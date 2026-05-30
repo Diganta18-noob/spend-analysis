@@ -18,7 +18,10 @@ IMPORTANT RULES:
 - FOR BANK ACCOUNTS: Debit transactions may be in a dedicated debit/withdrawal column, or have "Dr", "Debit", "Withdrawal", or "-" signs.
 - If the statement has a "STATEMENT SUMMARY" box, strictly extract the "Total Credits" / "Payments" / "Deposits" value for the 'total_credits' field, and use the "Purchases/Charges" or total debits for your own reference to ensure you don't over-extract.
 - Dates should be in YYYY-MM-DD format; if year is unclear, infer from context
-- Amounts should be strictly numeric (no currency symbols or CR/DR suffixes in the JSON)
+- Amounts should be strictly numeric (no currency symbols or CR/DR suffixes in the JSON). Keep decimals exactly as they appear in the statement (e.g., 723.20 must be 723.2, 272.58 must be 272.58). Do not round or drop decimal places!
+- ACCURACY & DEDUPLICATION: If multiple transactions have the same amount and description but occur on different dates or have different reference numbers, they are distinct transactions and you MUST extract all of them. Do not deduplicate them!
+- PAGE BOUNDARIES: Check reference/transaction numbers. If a transaction at the bottom of one page is printed again at the top of the next page with the exact same date, description, reference number, and amount, it is a page boundary duplicate and must be extracted only once. But if the reference number or date is different, they are separate transactions.
+- SELF-VERIFICATION: Before producing the final output, sum up all transaction amounts you have extracted. If the statement has a "Purchases / Charges" or "Total Debits" total in the summary box, compare your sum to that total. If they do not match, re-scan the pages to find the discrepancy (missed transaction or incorrect amount) and fix it.
 - Vendor names should be clean and concise (max 40 chars)
 - Even if the image quality is poor, try your best to read every line item
 - If a page appears to be a continuation, still extract all visible transactions

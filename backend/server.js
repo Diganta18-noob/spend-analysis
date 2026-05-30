@@ -72,15 +72,19 @@ async function convertPdfToImages(fileBuffer, password) {
     // Dynamically adjust scale and quality to stay under Vercel's 4.5MB payload limit
     // (4.5MB limit = ~3.3MB binary limit due to base64 encoding)
     // We use Grayscale compression to dramatically reduce size while keeping text sharp.
-    let scale = 2.0;
-    let quality = 80;
+    // Higher scale/resolution is preferred for accurate OCR of small text/numbers.
+    let scale = 2.5;
+    let quality = 85;
     
     if (count > 15) {
-      scale = 1.5;
+      scale = 1.6;
       quality = 70;
     } else if (count > 10) {
-      scale = 1.75;
+      scale = 1.9;
       quality = 75;
+    } else if (count > 5) {
+      scale = 2.2;
+      quality = 80;
     }
     
     console.log(`Processing ${count} pages with scale ${scale}x and Grayscale JPEG quality ${quality}`);
