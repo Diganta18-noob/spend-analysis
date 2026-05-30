@@ -1,87 +1,86 @@
-// Vercel Edge Function — proxies Gemini API calls through Vercel (US region)
+// Vercel Serverless Function — proxies Gemini API calls through Vercel (US region)
 // This bypasses the "User location is not supported" error from Render (Singapore)
+// Using Node.js runtime instead of Edge for longer timeout (60s vs 25s)
 
 export const config = {
-  runtime: 'edge',
-  // Edge functions have 25s timeout on all plans (vs 10s for serverless on Hobby)
+  maxDuration: 60, // Maximum allowed on Hobby plan (60s)
 };
+
+const FETCH_TIMEOUT_MS = 55000; // 55s — leave 5s buffer before Vercel kills the function
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, X-Proxy-Token',
+};
+
+function jsonResponse(data, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
 
 export default async function handler(request) {
   // Handle CORS preflight
-  const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, X-Proxy-Token',
-  };
-
   if (request.method === 'OPTIONS') {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
 
   if (request.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
-      status: 405,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return jsonResponse({ error: 'Method not allowed' }, 405);
   }
 
   // Simple auth — verify request comes from our backend
   const proxyToken = request.headers.get('x-proxy-token');
   const expectedToken = process.env.PROXY_SECRET;
   if (expectedToken && (!proxyToken || proxyToken !== expectedToken)) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-      status: 401,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return jsonResponse({ error: 'Unauthorized' }, 401);
   }
 
   let body;
   try {
     body = await request.json();
   } catch {
-    return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
-      status: 400,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return jsonResponse({ error: 'Invalid JSON body' }, 400);
   }
 
   const { modelName, apiVersion, payload } = body;
   const apiKey = process.env.GEMINI_API_KEY;
 
   if (!apiKey) {
-    return new Response(JSON.stringify({ error: 'GEMINI_API_KEY not configured' }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return jsonResponse({ error: 'GEMINI_API_KEY not configured' }, 500);
   }
 
   if (!modelName || !payload) {
-    return new Response(JSON.stringify({ error: 'Missing modelName or payload' }), {
-      status: 400,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return jsonResponse({ error: 'Missing modelName or payload' }, 400);
   }
 
   const version = apiVersion || 'v1beta';
   const endpoint = `https://generativelanguage.googleapis.com/${version}/models/${modelName}:generateContent?key=${apiKey}`;
 
   try {
+    // Use AbortController to enforce a timeout before Vercel kills the function
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
     const geminiResponse = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
+      signal: controller.signal,
     });
+
+    clearTimeout(timeoutId);
 
     const data = await geminiResponse.json();
-
-    return new Response(JSON.stringify(data), {
-      status: geminiResponse.status,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return jsonResponse(data, geminiResponse.status);
   } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 502,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    if (error.name === 'AbortError') {
+      return jsonResponse({
+        error: `Gemini API took too long to respond (>${FETCH_TIMEOUT_MS / 1000}s). Try uploading fewer pages or smaller images.`,
+      }, 504);
+    }
+    return jsonResponse({ error: error.message }, 502);
   }
 }
