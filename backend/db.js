@@ -46,10 +46,14 @@ export async function initDb() {
     return;
   }
   try {
-    await mongoose.connect(uri);
+    await mongoose.connect(uri, {
+      serverSelectionTimeoutMS: 5000, // Fail fast if MongoDB is unreachable (default 30s)
+      connectTimeoutMS: 10000,
+    });
     console.log("✅ Connected to MongoDB Atlas");
   } catch (err) {
     console.error("❌ MongoDB connection failed:", err.message);
+    console.error("   Server will continue running — DB operations will fail gracefully.");
   }
 }
 

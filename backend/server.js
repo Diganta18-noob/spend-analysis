@@ -122,10 +122,10 @@ app.post("/api/admin/login", async (req, res) => {
   const { password } = req.body;
   const ip = getClientIp(req);
   if (password === ADMIN_PASSWORD) {
-    await insertAuditLog({ action: "ADMIN_LOGIN", details: "Admin logged in successfully", ip });
+    try { await insertAuditLog({ action: "ADMIN_LOGIN", details: "Admin logged in successfully", ip }); } catch (e) { console.error("Audit log failed:", e.message); }
     res.json({ token: ADMIN_PASSWORD });
   } else {
-    await insertAuditLog({ action: "ADMIN_LOGIN_FAILED", details: "Failed login attempt", ip });
+    try { await insertAuditLog({ action: "ADMIN_LOGIN_FAILED", details: "Failed login attempt", ip }); } catch (e) { console.error("Audit log failed:", e.message); }
     res.status(401).json({ error: "Invalid password" });
   }
 });
