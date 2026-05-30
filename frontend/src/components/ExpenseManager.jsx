@@ -177,7 +177,7 @@ export default function ExpenseManager({ data, onBack, backLabel, onUpdateTransa
               >
                 {data?.bank || "Bank Statement"} {data?.account_holder ? `· ${data.account_holder}` : ""}
               </div>
-              <h1 style={{ margin: 0, fontSize: 26, fontWeight: 800, background: "linear-gradient(135deg, #fff 0%, #94a3b8 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+              <h1 style={{ margin: 0, fontSize: 26, fontWeight: 800, lineHeight: "1.3", paddingBottom: "4px", background: "linear-gradient(135deg, #fff 0%, #94a3b8 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
                 {data?.period || "Expense Analysis"}
               </h1>
               <div style={{ fontSize: 12, color: "#475569", marginTop: 4 }}>{TRANSACTIONS.length} debit transactions extracted</div>

@@ -504,6 +504,8 @@ const styles = {
     fontWeight: 800,
     margin: 0,
     marginBottom: 8,
+    lineHeight: "1.3",
+    paddingBottom: "6px",
     background: "linear-gradient(135deg, #fff 0%, #94a3b8 100%)",
     WebkitBackgroundClip: "text",
     WebkitTextFillColor: "transparent",
