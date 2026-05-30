@@ -124,9 +124,92 @@ export default function AdminDashboard() {
 
   const fmt = (num) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(num || 0);
 
-  if (loading || loadingAnalysis) {
-    return <div style={{ color: "#fff", padding: "40px", textAlign: "center", fontFamily: "Inter" }}>Loading...</div>;
+  if (loading) {
+    return (
+      <div style={{ minHeight: "100vh", background: "#020617", color: "#f8fafc", fontFamily: "'Inter', sans-serif" }}>
+        {/* Header */}
+        <header style={{ 
+          background: "rgba(15, 23, 42, 0.8)", backdropFilter: "blur(12px)", 
+          borderBottom: "1px solid rgba(255,255,255,0.05)", padding: "16px 32px",
+          display: "flex", justifyContent: "space-between", alignItems: "center",
+          position: "sticky", top: 0, zIndex: 10
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <div style={{ background: "#fbbf24", color: "#000", padding: "6px", borderRadius: "8px" }}>
+              <Database size={20} />
+            </div>
+            <h2 style={{ margin: 0, fontSize: "18px", fontWeight: "600" }}>Admin Portal</h2>
+          </div>
+          <div style={{ display: "flex", gap: "16px", alignItems: "center" }}>
+            <div className="shimmer" style={{ width: "80px", height: "16px", borderRadius: "4px" }}></div>
+            <div style={{ width: "1px", height: "16px", background: "rgba(255,255,255,0.1)" }}></div>
+            <div className="shimmer" style={{ width: "80px", height: "32px", borderRadius: "6px" }}></div>
+          </div>
+        </header>
+
+        <main style={{ padding: "32px", maxWidth: "1200px", margin: "0 auto" }}>
+          {/* Stats Row */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "20px", marginBottom: "24px" }}>
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+          </div>
+
+          {/* Tab Navigation */}
+          <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
+            <div className="shimmer" style={{ width: "100px", height: "32px", borderRadius: "8px" }}></div>
+            <div className="shimmer" style={{ width: "100px", height: "32px", borderRadius: "8px" }}></div>
+            <div className="shimmer" style={{ width: "100px", height: "32px", borderRadius: "8px" }}></div>
+          </div>
+
+          {/* Table Container */}
+          <div style={{ background: "#0f172a", borderRadius: "16px", border: "1px solid rgba(255,255,255,0.05)", overflow: "hidden" }}>
+            <div style={{ padding: "20px", borderBottom: "1px solid rgba(255,255,255,0.05)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div className="shimmer" style={{ height: "18px", width: "150px", borderRadius: "4px" }}></div>
+              <div className="shimmer" style={{ height: "32px", width: "100px", borderRadius: "6px" }}></div>
+            </div>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "14px" }}>
+                <thead>
+                  <tr style={{ background: "rgba(0,0,0,0.2)", color: "#94a3b8" }}>
+                    <th style={{ padding: "12px 20px", fontWeight: "500" }}>Date</th>
+                    <th style={{ padding: "12px 20px", fontWeight: "500" }}>Time</th>
+                    <th style={{ padding: "12px 20px", fontWeight: "500" }}>Period</th>
+                    <th style={{ padding: "12px 20px", fontWeight: "500" }}>Account Holder</th>
+                    <th style={{ padding: "12px 20px", fontWeight: "500" }}>Transactions</th>
+                    <th style={{ padding: "12px 20px", fontWeight: "500", textAlign: "right" }}>Total Spent</th>
+                    <th style={{ padding: "12px 20px", fontWeight: "500", textAlign: "center" }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <TableRowSkeleton />
+                  <TableRowSkeleton />
+                  <TableRowSkeleton />
+                  <TableRowSkeleton />
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
   }
+
+  if (loadingAnalysis) {
+    return (
+      <div style={{
+        minHeight: "100vh", background: "#020617", color: "#f8fafc", fontFamily: "'Inter', sans-serif",
+        display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", gap: "24px"
+      }}>
+        <div className="spin-loader"></div>
+        <div className="pulse-text" style={{ fontSize: "16px", color: "#94a3b8", fontWeight: "500" }}>
+          Opening Statement Analysis...
+        </div>
+      </div>
+    );
+  }
+
 
   if (viewingAnalysisData) {
     return (
@@ -304,3 +387,41 @@ function StatCard({ icon, title, value, color = "#fbbf24" }) {
     </div>
   );
 }
+
+function StatCardSkeleton() {
+  return (
+    <div style={{ 
+      background: "#0f172a", border: "1px solid rgba(255,255,255,0.05)", borderRadius: "16px", 
+      padding: "20px", display: "flex", alignItems: "center", gap: "16px" 
+    }}>
+      <div className="shimmer" style={{ width: "48px", height: "48px", borderRadius: "12px" }}></div>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "8px" }}>
+        <div className="shimmer" style={{ height: "12px", width: "80px", borderRadius: "4px" }}></div>
+        <div className="shimmer" style={{ height: "20px", width: "120px", borderRadius: "4px" }}></div>
+      </div>
+    </div>
+  );
+}
+
+function TableRowSkeleton() {
+  return (
+    <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.02)" }}>
+      <td style={{ padding: "16px 20px" }}><div className="shimmer" style={{ height: "14px", width: "80px", borderRadius: "4px" }}></div></td>
+      <td style={{ padding: "16px 20px" }}><div className="shimmer" style={{ height: "14px", width: "60px", borderRadius: "4px" }}></div></td>
+      <td style={{ padding: "16px 20px" }}><div className="shimmer" style={{ height: "14px", width: "100px", borderRadius: "4px" }}></div></td>
+      <td style={{ padding: "16px 20px" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+          <div className="shimmer" style={{ height: "14px", width: "140px", borderRadius: "4px" }}></div>
+          <div className="shimmer" style={{ height: "10px", width: "70px", borderRadius: "4px" }}></div>
+        </div>
+      </td>
+      <td style={{ padding: "16px 20px" }}><div className="shimmer" style={{ height: "14px", width: "40px", borderRadius: "4px" }}></div></td>
+      <td style={{ padding: "16px 20px" }}><div className="shimmer" style={{ height: "14px", width: "80px", borderRadius: "4px", marginLeft: "auto" }}></div></td>
+      <td style={{ padding: "16px 20px" }}><div style={{ display: "flex", justifyContent: "center", gap: "8px" }}>
+        <div className="shimmer" style={{ height: "30px", width: "30px", borderRadius: "6px" }}></div>
+        <div className="shimmer" style={{ height: "30px", width: "30px", borderRadius: "6px" }}></div>
+      </div></td>
+    </tr>
+  );
+}
+
