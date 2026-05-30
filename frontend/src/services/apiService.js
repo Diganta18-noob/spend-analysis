@@ -8,8 +8,19 @@ export async function adminLogin(password) {
     body: JSON.stringify({ password }),
   });
   if (!res.ok) {
-    const data = await res.json();
-    throw new Error(data.error || "Login failed");
+    let errorMsg = "Login failed";
+    try {
+      const data = await res.json();
+      errorMsg = data.error || errorMsg;
+    } catch {
+      // Backend returned non-JSON (e.g., HTML error page from Render when server is cold)
+      if (res.status === 502 || res.status === 503) {
+        errorMsg = "Backend server is waking up. Please wait a moment and try again.";
+      } else {
+        errorMsg = `Server error (${res.status}). The backend may be unavailable.`;
+      }
+    }
+    throw new Error(errorMsg);
   }
   return res.json();
 }

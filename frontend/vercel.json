@@ -3,5 +3,9 @@
     "api/gemini.js": {
       "maxDuration": 60
     }
-  }
+  },
+  "rewrites": [
+    { "source": "/api/gemini", "destination": "/api/gemini" },
+    { "source": "/api/:path*", "destination": "https://spend-analysis-moqe.onrender.com/api/:path*" }
+  ]
 }
