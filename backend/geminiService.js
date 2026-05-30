@@ -127,26 +127,65 @@ async function callGeminiModel(modelName, apiKey, imageParts, promptText, temper
     },
   };
 
+  const payloadJson = JSON.stringify(payload);
+  const proxyPayloadJson = GEMINI_PROXY_URL ? JSON.stringify({ modelName, apiVersion, payload }) : null;
+
+  // Estimate payload size for logging
+  const payloadSizeMB = (proxyPayloadJson || payloadJson).length / (1024 * 1024);
+  console.log(`[Gemini] Payload size: ${payloadSizeMB.toFixed(2)}MB`);
+
   let response;
+  let usedProxy = false;
 
   if (GEMINI_PROXY_URL) {
-    // Route through Vercel Edge proxy (US region) to bypass location restrictions
+    // Route through Vercel proxy (US region) to bypass location restrictions
     console.log(`[Gemini] Using proxy: ${GEMINI_PROXY_URL}`);
-    response = await fetch(GEMINI_PROXY_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Proxy-Token": PROXY_SECRET,
-      },
-      body: JSON.stringify({ modelName, apiVersion, payload }),
-    });
-  } else {
-    // Direct call to Google API
+    try {
+      response = await fetch(GEMINI_PROXY_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Proxy-Token": PROXY_SECRET,
+        },
+        body: proxyPayloadJson,
+      });
+      usedProxy = true;
+
+      // Detect Vercel infrastructure errors (FUNCTION_INVOCATION_FAILED, 502, 503, 504)
+      // These mean the proxy itself crashed, NOT that the Gemini API returned an error.
+      // Fall back to direct API call in these cases.
+      if (!response.ok && response.status >= 500) {
+        const errBody = await response.text();
+        const isProxyCrash = errBody.includes("FUNCTION_INVOCATION_FAILED") ||
+                             errBody.includes("FUNCTION_INVOCATION_TIMEOUT") ||
+                             errBody.includes("An error occurred") ||
+                             errBody.includes("EDGE_FUNCTION_INVOCATION") ||
+                             response.status === 502 || response.status === 503;
+
+        if (isProxyCrash) {
+          console.warn(`[Gemini] ⚠️ Proxy crashed (${response.status}): ${errBody.substring(0, 200)}`);
+          console.log(`[Gemini] Falling back to direct Gemini API call...`);
+          response = null; // Clear to trigger direct call below
+          usedProxy = false;
+        }
+      }
+    } catch (proxyFetchError) {
+      // Network error reaching the proxy (DNS failure, connection refused, etc.)
+      console.warn(`[Gemini] ⚠️ Proxy unreachable: ${proxyFetchError.message}`);
+      console.log(`[Gemini] Falling back to direct Gemini API call...`);
+      response = null;
+      usedProxy = false;
+    }
+  }
+
+  // Direct call to Google API (primary path when no proxy, or fallback when proxy fails)
+  if (!response) {
     const endpoint = `https://generativelanguage.googleapis.com/${apiVersion}/models/${modelName}:generateContent?key=${apiKey}`;
+    console.log(`[Gemini] Calling Gemini API directly: ${modelName} (${apiVersion})`);
     response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: payloadJson,
     });
   }
 
