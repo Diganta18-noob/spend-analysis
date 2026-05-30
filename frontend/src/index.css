@@ -11,6 +11,39 @@
   --shadow:
     rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
 
+  /* App Theme Variables (Dark Mode by Default) */
+  --app-bg: #08080f;
+  --app-card-bg: linear-gradient(135deg, #0f0f1e 0%, #11111f 100%);
+  --app-card-solid: #0f0f1e;
+  --app-text: #cbd5e1;
+  --app-text-h: #ffffff;
+  --app-text-muted: #64748b;
+  --app-text-darker: #475569;
+  --app-border: #1c1c35;
+  --app-border-hover: #2a2a50;
+  --app-input-bg: #0a0a18;
+  --app-table-border: #0d0d1a;
+  --app-toggle-bg: #1c1c38;
+  --app-shimmer-bg: linear-gradient(90deg, #1c1c35 0%, rgba(251, 191, 36, 0.25) 50%, #1c1c35 100%);
+}
+
+:root.light-mode {
+  /* App Light Theme Overrides */
+  --app-bg: #f8fafc;
+  --app-card-bg: linear-gradient(135deg, #ffffff 0%, #f1f5f9 100%);
+  --app-card-solid: #ffffff;
+  --app-text: #334155;
+  --app-text-h: #0f172a;
+  --app-text-muted: #64748b;
+  --app-text-darker: #94a3b8;
+  --app-border: #cbd5e1;
+  --app-border-hover: #94a3b8;
+  --app-input-bg: #ffffff;
+  --app-table-border: #e2e8f0;
+  --app-toggle-bg: #cbd5e1;
+  --app-shimmer-bg: linear-gradient(90deg, #e2e8f0 0%, rgba(251, 191, 36, 0.40) 50%, #e2e8f0 100%);
+}
+
   --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
   --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
   --mono: ui-monospace, Consolas, monospace;

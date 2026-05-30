@@ -31,7 +31,7 @@ const CustomTooltip = ({ active, payload, label }) => {
   );
 };
 
-export default function ExpenseManager({ data, onBack, backLabel, onUpdateTransaction, onBatchUpdateCategory }) {
+export default function ExpenseManager({ data, onBack, backLabel, onUpdateTransaction, onBatchUpdateCategory, theme, toggleTheme }) {
   const [showSelf, setShowSelf] = useState(false);
   const [filterCat, setFilterCat] = useState("All");
   const [sortBy, setSortBy] = useState("date");
@@ -105,12 +105,12 @@ export default function ExpenseManager({ data, onBack, backLabel, onUpdateTransa
     .slice(0, 6);
 
   const styles = {
-    root: { background: "#08080f", minHeight: "100vh", color: "#e2e8f0", fontFamily: "'DM Sans', 'Segoe UI', system-ui, sans-serif", padding: "20px 24px 40px" },
+    root: { background: "var(--app-bg)", minHeight: "100vh", color: "var(--app-text)", fontFamily: "'DM Sans', 'Segoe UI', system-ui, sans-serif", padding: "20px 24px 40px", transition: "background-color 0.3s ease, color 0.3s ease" },
     wrap: { width: "100%", maxWidth: "1800px", margin: "0 auto" },
-    card: { background: "linear-gradient(135deg, #0f0f1e 0%, #11111f 100%)", border: "1px solid #1c1c35", borderRadius: 14, padding: 18 },
-    label: { fontSize: 10, color: "#475569", textTransform: "uppercase", letterSpacing: "1.2px", marginBottom: 6, fontWeight: 600 },
+    card: { background: "var(--app-card-bg)", border: "1px solid var(--app-border)", borderRadius: 14, padding: 18, transition: "background 0.3s ease, border-color 0.3s ease" },
+    label: { fontSize: 10, color: "var(--app-text-muted)", textTransform: "uppercase", letterSpacing: "1.2px", marginBottom: 6, fontWeight: 600 },
     statVal: { fontSize: 22, fontWeight: 800, lineHeight: 1 },
-    sub: { fontSize: 11, color: "#475569", marginTop: 4 },
+    sub: { fontSize: 11, color: "var(--app-text-darker)", marginTop: 4 },
   };
 
   return (
@@ -118,41 +118,42 @@ export default function ExpenseManager({ data, onBack, backLabel, onUpdateTransa
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap');
         * { box-sizing: border-box; }
+        body { background: var(--app-bg); transition: background-color 0.3s ease; }
         ::-webkit-scrollbar { width: 4px; height: 4px; }
-        ::-webkit-scrollbar-track { background: #0f0f1e; }
-        ::-webkit-scrollbar-thumb { background: #2a2a50; border-radius: 4px; }
+        ::-webkit-scrollbar-track { background: var(--app-bg); }
+        ::-webkit-scrollbar-thumb { background: var(--app-border); border-radius: 4px; }
         .tab-btn { background: transparent; border: none; cursor: pointer; padding: 8px 16px; border-radius: 8px; font-family: inherit; font-size: 13px; font-weight: 600; transition: all 0.15s; }
-        .tab-btn.active { background: #1c1c38; color: #fbbf24; }
-        .tab-btn:not(.active) { color: #475569; }
-        .tab-btn:not(.active):hover { color: #94a3b8; }
+        .tab-btn.active { background: var(--app-border); color: #fbbf24; }
+        .tab-btn:not(.active) { color: var(--app-text-muted); }
+        .tab-btn:not(.active):hover { color: var(--app-text); }
         tr.tx-row:hover td { background: rgba(255,255,255,0.025) !important; }
         tr.tx-row .edit-hint { opacity: 0; transition: opacity 0.15s; }
         tr.tx-row:hover .edit-hint { opacity: 1; }
-        .toggle { width: 36px; height: 20px; border-radius: 10px; background: #1c1c38; border: 1px solid #2a2a50; cursor: pointer; position: relative; transition: background 0.2s; flex-shrink: 0; }
+        .toggle { width: 36px; height: 20px; border-radius: 10px; background: var(--app-toggle-bg); border: 1px solid var(--app-border); cursor: pointer; position: relative; transition: background 0.2s; flex-shrink: 0; }
         .toggle.on { background: #f59e0b33; border-color: #f59e0b; }
         .toggle::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #475569; transition: all 0.2s; }
         .toggle.on::after { left: 18px; background: #fbbf24; }
         .cat-pill { padding: 2px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
         .cat-pill-editable { cursor: pointer; transition: all 0.15s; position: relative; }
         .cat-pill-editable:hover { filter: brightness(1.3); box-shadow: 0 0 0 1px rgba(251,191,36,0.3); }
-        .cat-edit-select { appearance: none; background: #0a0a18; border: 1px solid #fbbf24; color: #fbbf24; border-radius: 8px; padding: 5px 10px; font-size: 11px; font-family: inherit; cursor: pointer; font-weight: 600; outline: none; min-width: 140px; }
-        .cat-edit-select option { background: #0a0a18; color: #e2e8f0; padding: 6px; }
-        select { appearance: none; background: #0f0f1e; border: 1px solid #1c1c35; color: #94a3b8; border-radius: 8px; padding: 6px 12px; font-size: 12px; font-family: inherit; cursor: pointer; }
+        .cat-edit-select { appearance: none; background: var(--app-input-bg); border: 1px solid #fbbf24; color: #fbbf24; border-radius: 8px; padding: 5px 10px; font-size: 11px; font-family: inherit; cursor: pointer; font-weight: 600; outline: none; min-width: 140px; }
+        .cat-edit-select option { background: var(--app-input-bg); color: var(--app-text); padding: 6px; }
+        select { appearance: none; background: var(--app-card-solid); border: 1px solid var(--app-border); color: var(--app-text); border-radius: 8px; padding: 6px 12px; font-size: 12px; font-family: inherit; cursor: pointer; transition: background-color 0.3s ease, border-color 0.3s ease; }
         select:focus { outline: none; border-color: #fbbf24; }
-        .ins-card { background: #0f0f1e; border: 1px solid #1c1c35; border-radius: 10px; padding: 12px 14px; display: flex; gap: 12px; align-items: flex-start; }
-        .back-btn { background: none; border: 1px solid #1c1c35; color: #64748b; padding: 6px 14px; border-radius: 8px; font-size: 12px; font-family: inherit; cursor: pointer; transition: all 0.15s; }
+        .ins-card { background: var(--app-card-solid); border: 1px solid var(--app-border); border-radius: 10px; padding: 12px 14px; display: flex; gap: 12px; align-items: flex-start; transition: background-color 0.3s ease, border-color 0.3s ease; }
+        .back-btn { background: none; border: 1px solid var(--app-border); color: var(--app-text-muted); padding: 6px 14px; border-radius: 8px; font-size: 12px; font-family: inherit; cursor: pointer; transition: all 0.15s; }
         .back-btn:hover { border-color: #fbbf24; color: #fbbf24; }
         .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
         .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
         .grid-overview { display: grid; grid-template-columns: 320px 1fr; gap: 16px; }
         .header-top { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px; }
-        .summary-item { padding: 10px 16px; border-left: 1px solid #1c1c35; }
+        .summary-item { padding: 10px 16px; border-left: 1px solid var(--app-border); }
         .summary-item:first-child { border-left: none; }
         
         @media (max-width: 1200px) {
           .grid-4 { grid-template-columns: repeat(2, 1fr); }
-          .summary-item:nth-child(3) { border-left: none; border-top: 1px solid #1c1c35; padding-top: 16px; }
-          .summary-item:nth-child(4) { border-top: 1px solid #1c1c35; padding-top: 16px; }
+          .summary-item:nth-child(3) { border-left: none; border-top: 1px solid var(--app-border); padding-top: 16px; }
+          .summary-item:nth-child(4) { border-top: 1px solid var(--app-border); padding-top: 16px; }
         }
         @media (max-width: 900px) {
           .grid-overview { grid-template-columns: 1fr; }
@@ -160,7 +161,7 @@ export default function ExpenseManager({ data, onBack, backLabel, onUpdateTransa
         @media (max-width: 640px) {
           .grid-4 { grid-template-columns: 1fr; }
           .grid-2 { grid-template-columns: 1fr; }
-          .summary-item { border-left: none !important; border-top: 1px solid #1c1c35; padding-top: 16px; }
+          .summary-item { border-left: none !important; border-top: 1px solid var(--app-border); padding-top: 16px; }
           .summary-item:first-child { border-top: none; padding-top: 10px; }
         }
       `}</style>
@@ -187,6 +188,27 @@ export default function ExpenseManager({ data, onBack, backLabel, onUpdateTransa
                 <div className={`toggle ${showSelf ? "on" : ""}`} onClick={() => setShowSelf(v => !v)} />
                 <span style={{ fontSize: 12, color: "#64748b" }}>Self-transfers <span style={{ color: "#6b7280" }}>({fmt(selfTotal)})</span></span>
               </div>
+              {toggleTheme && (
+                <button 
+                  onClick={toggleTheme}
+                  style={{
+                    background: "var(--app-card-solid)",
+                    border: "1px solid var(--app-border)",
+                    color: "var(--app-text)",
+                    padding: "6px 12px",
+                    borderRadius: "8px",
+                    fontSize: "14px",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    transition: "all 0.15s"
+                  }}
+                  title={`Switch to ${theme === "dark" ? "Light" : "Dark"} Mode`}
+                >
+                  {theme === "dark" ? "☀️" : "🌙"}
+                </button>
+              )}
               {onBack && <button className="back-btn" onClick={onBack}>← {backLabel || "New Analysis"}</button>}
             </div>
           </div>
@@ -241,9 +263,9 @@ export default function ExpenseManager({ data, onBack, backLabel, onUpdateTransa
                       <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}
                         onClick={() => setFilterCat(filterCat === c.name ? "All" : c.name)}>
                         <div style={{ width: 8, height: 8, borderRadius: "50%", background: meta.color, flexShrink: 0 }} />
-                        <span style={{ fontSize: 11, color: filterCat === c.name ? "#fff" : "#64748b", flex: 1, transition: "color 0.15s" }}>{c.name}</span>
+                        <span style={{ fontSize: 11, color: filterCat === c.name ? "var(--app-text-h)" : "#64748b", flex: 1, transition: "color 0.15s" }}>{c.name}</span>
                         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                          <div style={{ width: 50, height: 3, borderRadius: 2, background: "#1c1c35", overflow: "hidden" }}>
+                          <div style={{ width: 50, height: 3, borderRadius: 2, background: "var(--app-border)", overflow: "hidden" }}>
                             <div style={{ width: `${pct}%`, height: "100%", background: meta.color, borderRadius: 2 }} />
                           </div>
                           <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600, width: 60, textAlign: "right", fontFamily: "DM Mono, monospace" }}>{fmt(c.value)}</span>
@@ -339,8 +361,8 @@ export default function ExpenseManager({ data, onBack, backLabel, onUpdateTransa
                         <td style={{ padding: "9px 12px", color: "#475569", fontFamily: "DM Mono, monospace", fontSize: 11, whiteSpace: "nowrap", borderBottom: "1px solid #0d0d1a" }}>
                           {d.toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
                         </td>
-                        <td style={{ padding: "9px 12px", color: "#cbd5e1", borderBottom: "1px solid #0d0d1a" }}>{t.desc}</td>
-                        <td style={{ padding: "9px 12px", borderBottom: "1px solid #0d0d1a" }}>
+                        <td style={{ padding: "9px 12px", color: "var(--app-text)", borderBottom: "1px solid var(--app-table-border)" }}>{t.desc}</td>
+                        <td style={{ padding: "9px 12px", borderBottom: "1px solid var(--app-table-border)" }}>
                           {isEditing ? (
                             <select
                               className="cat-edit-select"
@@ -367,7 +389,7 @@ export default function ExpenseManager({ data, onBack, backLabel, onUpdateTransa
                             </span>
                           )}
                         </td>
-                        <td style={{ padding: "9px 12px", textAlign: "right", color: "#fca5a5", fontWeight: 600, fontFamily: "DM Mono, monospace", borderBottom: "1px solid #0d0d1a" }}>{fmt(t.amount)}</td>
+                        <td style={{ padding: "9px 12px", textAlign: "right", color: "#fca5a5", fontWeight: 600, fontFamily: "DM Mono, monospace", borderBottom: "1px solid var(--app-table-border)" }}>{fmt(t.amount)}</td>
                       </tr>
                     );
                   })}
@@ -400,7 +422,7 @@ export default function ExpenseManager({ data, onBack, backLabel, onUpdateTransa
                       </div>
                       <span style={{ fontSize: 13, fontWeight: 700, color: meta.color, fontFamily: "DM Mono, monospace" }}>{fmt(v.total)}</span>
                     </div>
-                    <div style={{ height: 4, background: "#1c1c35", borderRadius: 3, overflow: "hidden" }}>
+                    <div style={{ height: 4, background: "var(--app-border)", borderRadius: 3, overflow: "hidden" }}>
                       <div style={{ width: `${pct}%`, height: "100%", background: meta.color, borderRadius: 3, transition: "width 0.4s" }} />
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between", marginTop: 3 }}>

@@ -13,6 +13,21 @@ function App() {
   const [data, setData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [theme, setTheme] = useState(localStorage.getItem("theme") || "dark");
+
+  // Sync theme with document class and localStorage
+  useEffect(() => {
+    localStorage.setItem("theme", theme);
+    if (theme === "light") {
+      document.documentElement.classList.add("light-mode");
+    } else {
+      document.documentElement.classList.remove("light-mode");
+    }
+  }, [theme]);
+
+  const toggleTheme = useCallback(() => {
+    setTheme(prev => prev === "dark" ? "light" : "dark");
+  }, []);
 
   // Handle hash changes for simple routing
   useEffect(() => {
@@ -131,6 +146,8 @@ function App() {
         onBack={handleBack} 
         onUpdateTransaction={handleUpdateTransaction} 
         onBatchUpdateCategory={handleBatchUpdateCategory}
+        theme={theme}
+        toggleTheme={toggleTheme}
       />
     );
   }
@@ -141,6 +158,8 @@ function App() {
       onUseSample={handleUseSample}
       isLoading={isLoading}
       error={error}
+      theme={theme}
+      toggleTheme={toggleTheme}
     />
   );
 }

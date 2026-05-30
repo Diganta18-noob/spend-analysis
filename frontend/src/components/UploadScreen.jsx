@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { pingServer } from "../services/apiService";
 
-export default function UploadScreen({ onAnalyze, onUseSample, isLoading, error }) {
+export default function UploadScreen({ onAnalyze, onUseSample, isLoading, error, theme, toggleTheme }) {
   const [files, setFiles] = useState([]);
   const [isDragging, setIsDragging] = useState(false);
   const [pdfPassword, setPdfPassword] = useState("");
@@ -118,10 +118,39 @@ export default function UploadScreen({ onAnalyze, onUseSample, isLoading, error 
 
   return (
     <div style={styles.root}>
+      {/* Floating Theme Toggler */}
+      {toggleTheme && (
+        <button
+          onClick={toggleTheme}
+          style={{
+            position: "fixed",
+            top: "20px",
+            right: "20px",
+            width: "44px",
+            height: "44px",
+            borderRadius: "50%",
+            background: "var(--app-card-solid)",
+            border: "1px solid var(--app-border)",
+            color: "var(--app-text)",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
+            transition: "all 0.2s",
+            zIndex: 1000,
+            fontSize: "18px"
+          }}
+          title={`Switch to ${theme === "dark" ? "Light" : "Dark"} Mode`}
+        >
+          {theme === "dark" ? "☀️" : "🌙"}
+        </button>
+      )}
+
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { background: #08080f; }
+        body { background: var(--app-bg); transition: background-color 0.3s ease; }
         @keyframes pulse-glow {
           0%, 100% { box-shadow: 0 0 20px rgba(251, 191, 36, 0.05); }
           50% { box-shadow: 0 0 40px rgba(251, 191, 36, 0.15); }
@@ -479,14 +508,15 @@ export default function UploadScreen({ onAnalyze, onUseSample, isLoading, error 
 
 const styles = {
   root: {
-    background: "#08080f",
+    background: "var(--app-bg)",
     minHeight: "100vh",
-    color: "#e2e8f0",
+    color: "var(--app-text)",
     fontFamily: "'DM Sans', 'Segoe UI', system-ui, sans-serif",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
     padding: "40px 16px",
+    transition: "background-color 0.3s ease, color 0.3s ease",
   },
   container: {
     maxWidth: 560,
@@ -506,19 +536,19 @@ const styles = {
     marginBottom: 8,
     lineHeight: "1.3",
     paddingBottom: "6px",
-    background: "linear-gradient(135deg, #fff 0%, #94a3b8 100%)",
+    background: "linear-gradient(135deg, var(--app-text-h) 0%, var(--app-text-darker) 100%)",
     WebkitBackgroundClip: "text",
     WebkitTextFillColor: "transparent",
   },
   subtitle: {
     fontSize: 14,
-    color: "#64748b",
+    color: "var(--app-text-muted)",
     lineHeight: 1.6,
     maxWidth: 400,
     margin: "0 auto",
   },
   dropZone: {
-    border: "2px dashed #1c1c35",
+    border: "2px dashed var(--app-border)",
     borderRadius: 16,
     padding: 32,
     cursor: "pointer",
@@ -538,12 +568,12 @@ const styles = {
   dropTitle: {
     fontSize: 15,
     fontWeight: 600,
-    color: "#94a3b8",
+    color: "var(--app-text-muted)",
     marginBottom: 6,
   },
   dropSub: {
     fontSize: 12,
-    color: "#475569",
+    color: "var(--app-text-darker)",
   },
   previewGrid: {
     display: "flex",
@@ -558,8 +588,8 @@ const styles = {
     height: 130,
     borderRadius: 10,
     overflow: "hidden",
-    border: "1px solid #1c1c35",
-    background: "#0a0a18",
+    border: "1px solid var(--app-border)",
+    background: "var(--app-input-bg)",
   },
   previewImage: {
     width: "100%",
@@ -585,7 +615,7 @@ const styles = {
   },
   fileName: {
     fontSize: 9,
-    color: "#475569",
+    color: "var(--app-text-muted)",
     padding: "4px 6px",
     textAlign: "center",
     overflow: "hidden",
@@ -596,7 +626,7 @@ const styles = {
     width: 100,
     height: 130,
     borderRadius: 10,
-    border: "2px dashed #1c1c35",
+    border: "2px dashed var(--app-border)",
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
@@ -615,10 +645,10 @@ const styles = {
   passwordInput: {
     flex: 1,
     padding: "10px 14px",
-    background: "#0a0a18",
-    border: "1px solid #2a2a50",
+    background: "var(--app-input-bg)",
+    border: "1px solid var(--app-border)",
     borderRadius: 8,
-    color: "#e2e8f0",
+    color: "var(--app-text)",
     fontSize: 13,
     fontFamily: "inherit",
     outline: "none",
@@ -671,7 +701,7 @@ const styles = {
   sampleBtn: {
     background: "none",
     border: "none",
-    color: "#475569",
+    color: "var(--app-text-muted)",
     fontSize: 13,
     fontFamily: "inherit",
     cursor: "pointer",
@@ -683,7 +713,7 @@ const styles = {
   shimmerBar: {
     height: 4,
     borderRadius: 2,
-    background: "linear-gradient(90deg, #1c1c35 0%, #fbbf2440 50%, #1c1c35 100%)",
+    background: "var(--app-shimmer-bg)",
     backgroundSize: "200% 100%",
     animation: "shimmer 1.5s ease-in-out infinite",
   },
@@ -698,6 +728,6 @@ const styles = {
     alignItems: "center",
     gap: 8,
     fontSize: 11,
-    color: "#334155",
+    color: "var(--app-text-darker)",
   },
 };
