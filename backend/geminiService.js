@@ -139,6 +139,7 @@ async function callGeminiModel(modelName, apiKey, imageParts, promptText, temper
 
   let response;
   let usedProxy = false;
+  let responseText = null;
 
   if (GEMINI_PROXY_URL) {
     // Route through Vercel proxy (US region) to bypass location restrictions
@@ -170,6 +171,9 @@ async function callGeminiModel(modelName, apiKey, imageParts, promptText, temper
           console.log(`[Gemini] Falling back to direct Gemini API call...`);
           response = null; // Clear to trigger direct call below
           usedProxy = false;
+        } else {
+          // Store the read body so we don't try to read it again on line 196
+          responseText = errBody;
         }
       }
     } catch (proxyFetchError) {
@@ -193,7 +197,7 @@ async function callGeminiModel(modelName, apiKey, imageParts, promptText, temper
   }
 
   if (!response.ok) {
-    const errBody = await response.text();
+    const errBody = responseText !== null ? responseText : await response.text();
     let errorMessage = `Gemini API error (${response.status}): ${errBody}`;
     try {
       const parsedBody = JSON.parse(errBody);
