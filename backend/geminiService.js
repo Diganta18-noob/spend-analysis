@@ -268,70 +268,91 @@ export async function analyzeStatementsServer(files) {
 
               console.log(`[Gemini] Model: ${usedModel} (${apiVersion}) | Attempt ${attempt + 1}/${MAX_RETRIES + 1} (temp: ${temperature})`);
 
-              const result = await callGeminiModel(usedModel, apiKey, imageParts, promptText, temperature, apiVersion);
-              
-              // Safety check for empty candidates (often due to safety filters)
-              if (!result?.candidates?.[0]?.content?.parts?.[0]?.text) {
-                console.error(`[Gemini] ${usedModel} returned empty response or candidate. Full response:`, JSON.stringify(result));
-                throw new Error(`Empty response from ${usedModel}`);
-              }
-
-              const text = result.candidates[0].content.parts[0].text;
-
-              const cleaned = text
-                .replace(/```json\s*/gi, "")
-                .replace(/```\s*/gi, "")
-                .trim();
-
-              let parsed;
+              const attemptStartTime = Date.now();
               try {
-                parsed = JSON.parse(cleaned);
-              } catch (e) {
-                console.error(`[Gemini] Attempt ${attempt + 1} returned invalid JSON:`, text.substring(0, 200));
-                if (attempt < MAX_RETRIES) {
+                const result = await callGeminiModel(usedModel, apiKey, imageParts, promptText, temperature, apiVersion);
+                
+                // Safety check for empty candidates (often due to safety filters)
+                if (!result?.candidates?.[0]?.content?.parts?.[0]?.text) {
+                  console.error(`[Gemini] ${usedModel} returned empty response or candidate. Full response:`, JSON.stringify(result));
+                  throw new Error(`Empty response from ${usedModel}`);
+                }
+
+                const text = result.candidates[0].content.parts[0].text;
+
+                const cleaned = text
+                  .replace(/```json\s*/gi, "")
+                  .replace(/```\s*/gi, "")
+                  .trim();
+
+                let parsed;
+                try {
+                  parsed = JSON.parse(cleaned);
+                } catch (e) {
+                  console.error(`[Gemini] Attempt ${attempt + 1} returned invalid JSON:`, text.substring(0, 200));
+                  throw new Error("AI returned invalid JSON. Please try again.");
+                }
+
+                if (!parsed.transactions || !Array.isArray(parsed.transactions)) {
+                  console.error(`[Gemini] Attempt ${attempt + 1} missing transactions array`);
+                  throw new Error("Invalid response format: missing transactions array.");
+                }
+
+                // If we got 0 transactions, retry with enhanced prompt
+                if (parsed.transactions.length === 0 && attempt < MAX_RETRIES) {
+                  console.warn(`[Gemini] Attempt ${attempt + 1} returned 0 transactions — retrying with enhanced prompt...`);
+                  throw new Error("AI returned 0 transactions. Please try again.");
+                }
+
+                // Detect misclassification: if 100% of transactions share the same category, retry
+                if (parsed.transactions.length >= 5 && attempt < MAX_RETRIES) {
+                  const catCounts = {};
+                  parsed.transactions.forEach(t => { catCounts[t.cat] = (catCounts[t.cat] || 0) + 1; });
+                  const maxCatCount = Math.max(...Object.values(catCounts));
+                  const dominantCat = Object.keys(catCounts).find(k => catCounts[k] === maxCatCount);
+                  const ratio = maxCatCount / parsed.transactions.length;
+                  if (ratio >= 1.0 && dominantCat !== "Other") {
+                    console.warn(`[Gemini] Attempt ${attempt + 1}: 100% of transactions are "${dominantCat}" — likely misclassified, retrying...`);
+                    throw new Error(`AI misclassified all transactions into "${dominantCat}". Please try again.`);
+                  }
+                }
+
+                // Final safety net: auto-fix categories if still dominated by one category
+                parsed.transactions = fixMisclassifiedCategories(parsed.transactions);
+
+                console.log(`[Gemini] ✅ Success with ${usedModel} (${apiVersion}) on attempt ${attempt + 1}: ${parsed.transactions.length} transactions extracted`);
+                
+                // Record success for this attempt
+                const latency = Date.now() - attemptStartTime;
+                try {
+                  await recordApiCall({ success: true, latency, tokens: tokensEst, provider: `gemini:${usedModel}` });
+                } catch (logErr) {
+                  console.error("[Gemini] Failed to record API call:", logErr.message);
+                }
+
+                success = true;
+                return parsed;
+              } catch (attemptError) {
+                // Record failure for this attempt
+                const latency = Date.now() - attemptStartTime;
+                try {
+                  await recordApiCall({ success: false, latency, tokens: tokensEst, error: attemptError.message, provider: `gemini:${usedModel}` });
+                } catch (logErr) {
+                  console.error("[Gemini] Failed to record API call:", logErr.message);
+                }
+
+                const isRetryable = attemptError.message.includes("invalid JSON") || 
+                                    attemptError.message.includes("missing transactions") || 
+                                    attemptError.message.includes("0 transactions") || 
+                                    attemptError.message.includes("misclassified");
+
+                if (isRetryable && attempt < MAX_RETRIES) {
                   attempt++;
-                  console.log(`[Gemini] Retrying due to invalid JSON...`);
+                  console.log(`[Gemini] Retrying...`);
                   continue;
                 }
-                throw new Error("AI returned invalid JSON. Please try again.");
+                throw attemptError;
               }
-
-              if (!parsed.transactions || !Array.isArray(parsed.transactions)) {
-                console.error(`[Gemini] Attempt ${attempt + 1} missing transactions array`);
-                if (attempt < MAX_RETRIES) {
-                  attempt++;
-                  continue;
-                }
-                throw new Error("Invalid response format: missing transactions array.");
-              }
-
-              // If we got 0 transactions, retry with enhanced prompt
-              if (parsed.transactions.length === 0 && attempt < MAX_RETRIES) {
-                console.warn(`[Gemini] Attempt ${attempt + 1} returned 0 transactions — retrying with enhanced prompt...`);
-                attempt++;
-                continue;
-              }
-
-              // Detect misclassification: if 100% of transactions share the same category, retry
-              if (parsed.transactions.length >= 5 && attempt < MAX_RETRIES) {
-                const catCounts = {};
-                parsed.transactions.forEach(t => { catCounts[t.cat] = (catCounts[t.cat] || 0) + 1; });
-                const maxCatCount = Math.max(...Object.values(catCounts));
-                const dominantCat = Object.keys(catCounts).find(k => catCounts[k] === maxCatCount);
-                const ratio = maxCatCount / parsed.transactions.length;
-                if (ratio >= 1.0 && dominantCat !== "Other") {
-                  console.warn(`[Gemini] Attempt ${attempt + 1}: 100% of transactions are "${dominantCat}" — likely misclassified, retrying...`);
-                  attempt++;
-                  continue;
-                }
-              }
-
-              // Final safety net: auto-fix categories if still dominated by one category
-              parsed.transactions = fixMisclassifiedCategories(parsed.transactions);
-
-              console.log(`[Gemini] ✅ Success with ${usedModel} (${apiVersion}) on attempt ${attempt + 1}: ${parsed.transactions.length} transactions extracted`);
-              success = true;
-              return parsed;
             }
 
             // All retries exhausted for this model+version but no fatal error — break out of version loop
@@ -398,15 +419,7 @@ export async function analyzeStatementsServer(files) {
     }
     throw new Error("All Gemini models exhausted or failed. Please try again later.");
   } catch (error) {
-    errorMsg = error.message;
     throw error;
-  } finally {
-    const latency = Date.now() - startTime;
-    try {
-      await recordApiCall({ success, latency, tokens: tokensEst, error: errorMsg, provider: `gemini:${usedModel}` });
-    } catch (logErr) {
-      console.error("[Gemini] Failed to record API call:", logErr.message);
-    }
   }
 }
 
