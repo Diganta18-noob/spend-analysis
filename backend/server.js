@@ -119,11 +119,38 @@ async function convertPdfToImages(fileBuffer, password) {
   }
 }
 
+// --- Image Compression Helper ---
+async function compressImage(fileBuffer) {
+  try {
+    const image = sharp(fileBuffer);
+    const metadata = await image.metadata();
+
+    let pipeline = image.grayscale();
+
+    // Resize if dimensions exceed 2000px to speed up Gemini processing and keep payload small
+    const MAX_DIMENSION = 2000;
+    if (metadata.width > MAX_DIMENSION || metadata.height > MAX_DIMENSION) {
+      if (metadata.width > metadata.height) {
+        pipeline = pipeline.resize({ width: MAX_DIMENSION, withoutEnlargement: true });
+      } else {
+        pipeline = pipeline.resize({ height: MAX_DIMENSION, withoutEnlargement: true });
+      }
+    }
+
+    return await pipeline
+      .jpeg({ quality: 80 })
+      .toBuffer();
+  } catch (err) {
+    console.error("Image compression error:", err.message);
+    return fileBuffer; // Fallback to original buffer
+  }
+}
+
 // --- ROUTES ---
 
 // Admin Login
 app.post("/api/admin/login", async (req, res) => {
-  const { password } = req.body;
+  const password = req.body.password;
   const ip = getClientIp(req);
   if (password === ADMIN_PASSWORD) {
     try { await insertAuditLog({ action: "ADMIN_LOGIN", details: "Admin logged in successfully", ip }); } catch (e) { console.error("Audit log failed:", e.message); }
@@ -220,7 +247,14 @@ app.post("/api/analyze", upload.array("files", 10), async (req, res) => {
           });
         });
       } else {
-        processedFiles.push(file);
+        console.log(`Compressing uploaded image: ${file.originalname} (${Math.round(file.buffer.length / 1024)}KB)`);
+        const compressedBuffer = await compressImage(file.buffer);
+        console.log(`Compressed image from ${Math.round(file.buffer.length / 1024)}KB to ${Math.round(compressedBuffer.length / 1024)}KB`);
+        processedFiles.push({
+          originalname: file.originalname,
+          mimetype: "image/jpeg",
+          buffer: compressedBuffer,
+        });
       }
     }
 
