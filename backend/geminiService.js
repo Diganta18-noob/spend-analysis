@@ -100,10 +100,12 @@ const MAX_RETRIES = 2; // Will attempt up to 2 more times if issues detected
 
 // Fallback chain — if one model's quota is exhausted or it fails, try the next
 const MODEL_CHAIN = [
+  "gemini-3.5-flash",
   "gemini-2.5-flash",
+  "gemini-2.5-flash-lite",
+  "gemini-3.1-flash-lite",
   "gemini-2.0-flash",
   "gemini-2.0-flash-lite",
-  "gemini-2.5-flash-lite",
 ];
 
 // Try both API versions — some regions/models only work on one
@@ -164,7 +166,8 @@ async function callGeminiModel(modelName, apiKey, imageParts, promptText, temper
                              errBody.includes("FUNCTION_INVOCATION_TIMEOUT") ||
                              errBody.includes("An error occurred") ||
                              errBody.includes("EDGE_FUNCTION_INVOCATION") ||
-                             response.status === 502 || response.status === 503;
+                             response.status === 502 || response.status === 503 ||
+                             response.status === 504;
 
         if (isProxyCrash) {
           console.warn(`[Gemini] ⚠️ Proxy crashed (${response.status}): ${errBody.substring(0, 200)}`);
@@ -340,8 +343,15 @@ export async function analyzeStatementsServer(files) {
               console.warn(`[Gemini] ⚠️ Location restricted on ${usedModel} (${apiVersion}) — trying next API version...`);
               continue;
             }
-            // If quota/404/empty, break out and try next model
-            if (versionError.isQuotaError || versionError.isNotFoundError || versionError.message.includes("Empty response")) {
+            
+            // Check for timeout
+            const isTimeoutError = versionError.status === 504 || 
+                                   versionError.status === 408 || 
+                                   (versionError.message && versionError.message.toLowerCase().includes("took too long")) ||
+                                   (versionError.message && versionError.message.toLowerCase().includes("timeout"));
+
+            // If quota/404/empty/timeout, break out and try next model
+            if (versionError.isQuotaError || versionError.isNotFoundError || (versionError.message && versionError.message.includes("Empty response")) || isTimeoutError) {
               break;
             }
             // For other errors (bad JSON, missing transactions after all retries), stop
@@ -355,7 +365,16 @@ export async function analyzeStatementsServer(files) {
       } catch (modelError) {
         // If it's a recoverable error and we have more models to try, fall back
         const canFallback = modelIdx < MODEL_CHAIN.length - 1;
-        const isTemporaryError = modelError.isQuotaError || modelError.message.includes("Empty response") || modelError.isNotFoundError || modelError.isLocationError;
+        const isTimeout = modelError.status === 504 || 
+                          modelError.status === 408 || 
+                          (modelError.message && modelError.message.toLowerCase().includes("took too long")) ||
+                          (modelError.message && modelError.message.toLowerCase().includes("timeout"));
+
+        const isTemporaryError = modelError.isQuotaError || 
+                                 (modelError.message && modelError.message.includes("Empty response")) || 
+                                 modelError.isNotFoundError || 
+                                 modelError.isLocationError || 
+                                 isTimeout;
 
         if (isTemporaryError && canFallback) {
           console.warn(`[Gemini] ⚠️ ${modelError.message} for ${usedModel} — falling back to ${MODEL_CHAIN[modelIdx + 1]}...`);

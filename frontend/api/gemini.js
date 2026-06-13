@@ -6,7 +6,7 @@ export const config = {
   maxDuration: 60, // Maximum allowed on Hobby plan (60s)
 };
 
-const FETCH_TIMEOUT_MS = 55000; // 55s — leave 5s buffer before Vercel kills the function
+const FETCH_TIMEOUT_MS = 45000; // 45s — leave 15s buffer before Vercel kills the function
 
 export default async function handler(req, res) {
   // Set CORS headers
