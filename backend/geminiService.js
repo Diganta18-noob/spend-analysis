@@ -190,7 +190,8 @@ async function callGeminiModel(modelName, apiKey, imageParts, promptText, temper
 
   // Direct call to Google API (primary path when no proxy, or fallback when proxy fails)
   if (!response) {
-    const endpoint = `https://generativelanguage.googleapis.com/${apiVersion}/models/${modelName}:generateContent?key=${apiKey}`;
+    const apiBase = process.env.GEMINI_API_BASE || "https://generativelanguage.googleapis.com";
+    const endpoint = `${apiBase}/${apiVersion}/models/${modelName}:generateContent?key=${apiKey}`;
     console.log(`[Gemini] Calling Gemini API directly: ${modelName} (${apiVersion})`);
     response = await fetch(endpoint, {
       method: "POST",
@@ -214,6 +215,7 @@ async function callGeminiModel(modelName, apiKey, imageParts, promptText, temper
     err.isQuotaError = errorMessage.toLowerCase().includes("quota") || response.status === 429;
     err.isNotFoundError = response.status === 404;
     err.isLocationError = errorMessage.toLowerCase().includes("user location is not supported") || errorMessage.toLowerCase().includes("location is not supported");
+    err.isTimeoutError = response.status === 504 || response.status === 408 || errorMessage.toLowerCase().includes("timeout") || errorMessage.toLowerCase().includes("took too long");
     throw err;
   }
 
@@ -345,7 +347,8 @@ export async function analyzeStatementsServer(files) {
             }
             
             // Check for timeout
-            const isTimeoutError = versionError.status === 504 || 
+            const isTimeoutError = versionError.isTimeoutError ||
+                                   versionError.status === 504 || 
                                    versionError.status === 408 || 
                                    (versionError.message && versionError.message.toLowerCase().includes("took too long")) ||
                                    (versionError.message && versionError.message.toLowerCase().includes("timeout"));
