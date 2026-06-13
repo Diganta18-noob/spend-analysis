@@ -102,7 +102,7 @@ export async function fetchAuditLogs(limit = 50, offset = 0) {
 
 // --- API Usage ---
 export async function fetchApiUsage() {
-  const res = await fetch(`${API_BASE}/admin/api-usage`, {
+  const res = await fetch(`${API_BASE}/admin/api-usage?t=${Date.now()}`, {
     headers: getAuthHeaders(),
   });
   if (!res.ok) throw new Error("Failed to fetch API usage");

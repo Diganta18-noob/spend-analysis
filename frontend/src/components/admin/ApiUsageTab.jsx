@@ -16,6 +16,7 @@ const CustomTooltip = ({ active, payload, label }) => {
 export default function ApiUsageTab() {
   const [usage, setUsage] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     loadUsage();
@@ -25,7 +26,18 @@ export default function ApiUsageTab() {
   }, []);
 
   const loadUsage = () => {
-    fetchApiUsage().then(data => { setUsage(data); setLoading(false); }).catch(() => setLoading(false));
+    setRefreshing(true);
+    fetchApiUsage()
+      .then(data => {
+        setUsage(data);
+        setLoading(false);
+        setRefreshing(false);
+      })
+      .catch(err => {
+        console.error("Failed to load API usage:", err);
+        setLoading(false);
+        setRefreshing(false);
+      });
   };
 
   if (loading) return <div style={{ color: "#64748b", padding: 40, textAlign: "center" }}>Loading API usage...</div>;
@@ -96,7 +108,23 @@ export default function ApiUsageTab() {
         <div style={{ marginTop: 20, background: "#0a0a18", borderRadius: 12, border: "1px solid rgba(248,113,113,0.15)", padding: 16 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
             <div style={{ fontSize: 11, color: "#f87171", textTransform: "uppercase", letterSpacing: "1.2px", fontWeight: 600 }}>Recent Errors</div>
-            <button onClick={loadUsage} style={{ background: "transparent", border: "1px solid rgba(248,113,113,0.2)", color: "#f87171", fontSize: 10, padding: "3px 8px", borderRadius: 4, cursor: "pointer", fontFamily: "inherit" }}>↻ Refresh</button>
+            <button 
+              onClick={loadUsage} 
+              disabled={refreshing}
+              style={{ 
+                background: "transparent", 
+                border: "1px solid rgba(248,113,113,0.2)", 
+                color: "#f87171", 
+                fontSize: 10, 
+                padding: "3px 8px", 
+                borderRadius: 4, 
+                cursor: refreshing ? "not-allowed" : "pointer", 
+                fontFamily: "inherit",
+                opacity: refreshing ? 0.6 : 1
+              }}
+            >
+              {refreshing ? "↻ Refreshing..." : "↻ Refresh"}
+            </button>
           </div>
           {daily.filter(d => d.errors?.length > 0).slice(-5).flatMap(d => d.errors.slice(-10).map((e, i) => (
             <div key={`${d.date}-${i}`} style={{ fontSize: 12, color: "#fca5a5", padding: "6px 0", borderBottom: "1px solid rgba(255,255,255,0.02)" }}>

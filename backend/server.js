@@ -399,6 +399,7 @@ app.get("/api/admin/audit-logs", requireAdmin, async (req, res) => {
 // --- Admin: API Usage ---
 app.get("/api/admin/api-usage", requireAdmin, async (req, res) => {
   try {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
     const data = await getApiUsage();
     res.json(data);
   } catch (error) {
