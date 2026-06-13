@@ -17,7 +17,7 @@ IMPORTANT RULES:
 - FOR CREDIT CARDS: Purchases/spends are normal amounts. Payments/refunds usually have "CR" or "Cr" next to them. DO NOT extract entries marked with "CR" or "Cr".
 - FOR BANK ACCOUNTS: Debit transactions may be in a dedicated debit/withdrawal column, or have "Dr", "Debit", "Withdrawal", or "-" signs.
 - If the statement has a "STATEMENT SUMMARY" box, strictly extract the "Total Credits" / "Payments" / "Deposits" value for the 'total_credits' field, and use the "Purchases/Charges" or total debits for your own reference to ensure you don't over-extract.
-- Dates should be in YYYY-MM-DD format; if year is unclear, infer from context
+- Dates should be in YYYY-MM-DD format; if year is unclear, infer from context. Ensure absolute accuracy for dates and check for common OCR misreads (e.g., do not misread 29 as 23, or 08 as 03).
 - Amounts should be strictly numeric (no currency symbols or CR/DR suffixes in the JSON). Keep decimals exactly as they appear in the statement (e.g., 723.20 must be 723.2, 272.58 must be 272.58). Do not round or drop decimal places!
 - ACCURACY & DEDUPLICATION: If multiple transactions have the same amount and description but occur on different dates or have different reference numbers, they are distinct transactions and you MUST extract all of them. Do not deduplicate them!
 - PAGE BOUNDARIES: Check reference/transaction numbers. If a transaction at the bottom of one page is printed again at the top of the next page with the exact same date, description, reference number, and amount, it is a page boundary duplicate and must be extracted only once. But if the reference number or date is different, they are separate transactions.
@@ -415,20 +415,9 @@ export async function analyzeStatementsServer(files) {
  * This runs as a safety net when the AI persistently assigns wrong categories.
  */
 function fixMisclassifiedCategories(transactions) {
-  // Check if categories are dominated by one value
-  const catCounts = {};
-  transactions.forEach(t => { catCounts[t.cat] = (catCounts[t.cat] || 0) + 1; });
-  const maxCount = Math.max(...Object.values(catCounts));
-  const ratio = maxCount / transactions.length;
-
-  // Only auto-fix if >70% are in the same category (sign of misclassification)
-  if (ratio <= 0.7 || transactions.length < 3) return transactions;
-
-  console.log(`[Gemini] ⚠️ Auto-fixing categories (${Math.round(ratio * 100)}% in one category)...`);
-
   const KEYWORD_RULES = [
     // Food & Dining
-    { keywords: ["swiggy", "zomato", "restaurant", "cafe", "pizza", "burger", "dominos", "mcdonald", "kfc", "subway", "biryani", "food", "dining", "eat", "hotel", "dhaba", "bakery", "tea", "coffee", "starbucks", "chaayos"], cat: "Food & Dining" },
+    { keywords: ["swiggy", "zomato", "restaurant", "cafe", "pizza", "burger", "domino", "mcdonald", "kfc", "subway", "biryani", "food", "dining", "eat", "hotel", "dhaba", "bakery", "tea", "coffee", "starbucks", "chaayos"], cat: "Food & Dining" },
     // Office Food
     { keywords: ["canteen", "cafeteria", "smartq", "office food", "mess", "tiffin"], cat: "Office Food" },
     // Transport
@@ -453,32 +442,50 @@ function fixMisclassifiedCategories(transactions) {
     { keywords: ["self", "own account", "own a/c", "fund transfer to self", "neft to self"], cat: "Self Transfer" },
   ];
 
-  let fixed = 0;
-  return transactions.map(t => {
+  // 1. Always apply high-confidence keyword rules first
+  let updatedTransactions = transactions.map(t => {
     const desc = (t.desc || "").toLowerCase();
-
-    // Try to match keywords
     for (const rule of KEYWORD_RULES) {
       if (rule.keywords.some(kw => desc.includes(kw))) {
         if (t.cat !== rule.cat) {
-          fixed++;
-          console.log(`[AutoFix] "${t.desc}" : ${t.cat} → ${rule.cat}`);
+          console.log(`[AutoFix Keyword] "${t.desc}" : ${t.cat} → ${rule.cat}`);
         }
         return { ...t, cat: rule.cat };
       }
     }
+    return t;
+  });
+
+  // Check if categories are dominated by one value
+  const catCounts = {};
+  updatedTransactions.forEach(t => { catCounts[t.cat] = (catCounts[t.cat] || 0) + 1; });
+  const maxCount = Math.max(...Object.values(catCounts));
+  const ratio = maxCount / updatedTransactions.length;
+
+  // Only auto-fix dominant category or self-transfer fallback if >70% are in the same category
+  if (ratio <= 0.7 || updatedTransactions.length < 3) {
+    return updatedTransactions;
+  }
+
+  console.log(`[Gemini] ⚠️ Auto-fixing dominant category (${Math.round(ratio * 100)}% in one category)...`);
+
+  const dominantCat = Object.keys(catCounts).find(k => catCounts[k] === maxCount);
+
+  return updatedTransactions.map(t => {
+    const desc = (t.desc || "").toLowerCase();
+    // Skip if it matched a keyword rule (i.e. it was already handled or updated)
+    const matchedKeyword = KEYWORD_RULES.some(rule => rule.keywords.some(kw => desc.includes(kw)));
+    if (matchedKeyword) return t;
 
     // If no keyword match and currently "Self Transfer", change to "Personal Transfer" (UPI to people is most common)
     if (t.cat === "Self Transfer") {
-      fixed++;
-      console.log(`[AutoFix] "${t.desc}" : Self Transfer → Personal Transfer`);
+      console.log(`[AutoFix Fallback] "${t.desc}" : Self Transfer → Personal Transfer`);
       return { ...t, cat: "Personal Transfer" };
     }
 
     // If no keyword match and currently the dominant category, change to "Other"
-    const dominantCat = Object.keys(catCounts).find(k => catCounts[k] === maxCount);
     if (t.cat === dominantCat) {
-      fixed++;
+      console.log(`[AutoFix Fallback] "${t.desc}" : ${t.cat} → Other`);
       return { ...t, cat: "Other" };
     }
 
