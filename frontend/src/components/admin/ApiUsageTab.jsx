@@ -27,16 +27,25 @@ export default function ApiUsageTab() {
 
   const loadUsage = () => {
     setRefreshing(true);
+    const startTime = Date.now();
     fetchApiUsage()
       .then(data => {
-        setUsage(data);
-        setLoading(false);
-        setRefreshing(false);
+        const elapsed = Date.now() - startTime;
+        const remaining = Math.max(0, 600 - elapsed);
+        setTimeout(() => {
+          setUsage(data);
+          setLoading(false);
+          setRefreshing(false);
+        }, remaining);
       })
       .catch(err => {
         console.error("Failed to load API usage:", err);
-        setLoading(false);
-        setRefreshing(false);
+        const elapsed = Date.now() - startTime;
+        const remaining = Math.max(0, 600 - elapsed);
+        setTimeout(() => {
+          setLoading(false);
+          setRefreshing(false);
+        }, remaining);
       });
   };
 

@@ -45,7 +45,7 @@ const getAuthHeaders = () => {
 };
 
 export async function fetchAnalyses() {
-  const res = await fetch(`${API_BASE}/analyses`, {
+  const res = await fetch(`${API_BASE}/analyses?t=${Date.now()}`, {
     headers: getAuthHeaders(),
   });
   if (!res.ok) {
@@ -56,7 +56,7 @@ export async function fetchAnalyses() {
 }
 
 export async function fetchStats() {
-  const res = await fetch(`${API_BASE}/stats`, {
+  const res = await fetch(`${API_BASE}/stats?t=${Date.now()}`, {
     headers: getAuthHeaders(),
   });
   if (!res.ok) {
@@ -66,7 +66,7 @@ export async function fetchStats() {
 }
 
 export async function fetchAnalysis(id) {
-  const res = await fetch(`${API_BASE}/analyses/${id}`);
+  const res = await fetch(`${API_BASE}/analyses/${id}?t=${Date.now()}`);
   if (!res.ok) throw new Error("Failed to fetch analysis");
   return res.json();
 }
@@ -93,7 +93,7 @@ export async function deleteAnalysis(id) {
 
 // --- Audit Logs ---
 export async function fetchAuditLogs(limit = 50, offset = 0) {
-  const res = await fetch(`${API_BASE}/admin/audit-logs?limit=${limit}&offset=${offset}`, {
+  const res = await fetch(`${API_BASE}/admin/audit-logs?limit=${limit}&offset=${offset}&t=${Date.now()}`, {
     headers: getAuthHeaders(),
   });
   if (!res.ok) throw new Error("Failed to fetch audit logs");
