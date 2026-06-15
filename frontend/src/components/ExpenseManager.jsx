@@ -405,7 +405,9 @@ export default function ExpenseManager({ data, onBack, backLabel, onUpdateTransa
                             </span>
                           )}
                         </td>
-                        <td style={{ padding: "9px 12px", textAlign: "right", color: "#fca5a5", fontWeight: 600, fontFamily: "DM Mono, monospace", borderBottom: "1px solid var(--app-table-border)" }}>{fmt(t.amount)}</td>
+                        <td style={{ padding: "9px 12px", textAlign: "right", color: t.amount < 0 ? "#34d399" : "#fca5a5", fontWeight: 600, fontFamily: "DM Mono, monospace", borderBottom: "1px solid var(--app-table-border)" }}>
+                          {t.amount < 0 ? `-${fmt(Math.abs(t.amount))}` : fmt(t.amount)}
+                        </td>
                       </tr>
                     );
                   })}
@@ -413,7 +415,12 @@ export default function ExpenseManager({ data, onBack, backLabel, onUpdateTransa
                 <tfoot>
                   <tr>
                     <td colSpan={3} style={{ padding: "10px 12px", color: "#64748b", fontSize: 12, borderTop: "2px solid #1c1c35" }}>{filteredTxns.length} transactions</td>
-                    <td style={{ padding: "10px 12px", textAlign: "right", color: "#f87171", fontWeight: 700, fontFamily: "DM Mono, monospace", borderTop: "2px solid #1c1c35" }}>{fmt(filteredTxns.reduce((s, t) => s + t.amount, 0))}</td>
+                    <td style={{ padding: "10px 12px", textAlign: "right", color: filteredTxns.reduce((s, t) => s + t.amount, 0) < 0 ? "#34d399" : "#f87171", fontWeight: 700, fontFamily: "DM Mono, monospace", borderTop: "2px solid #1c1c35" }}>
+                      {(() => {
+                        const sum = filteredTxns.reduce((s, t) => s + t.amount, 0);
+                        return sum < 0 ? `-${fmt(Math.abs(sum))}` : fmt(sum);
+                      })()}
+                    </td>
                   </tr>
                 </tfoot>
               </table>

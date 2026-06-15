@@ -14,7 +14,7 @@ The user has uploaded one or more photos or PDF documents of their bank account 
 IMPORTANT RULES:
 - Extract EVERY debit/expense transaction visible — do not skip any
 - Look very carefully at the document — it may be a bank account ledger, or a CREDIT CARD statement.
-- FOR CREDIT CARDS: Purchases/spends are normal amounts. Payments/refunds usually have "CR" or "Cr" next to them. DO NOT extract entries marked with "CR" or "Cr".
+- FOR CREDIT CARDS: Purchases/spends are normal amounts. Payments/refunds usually have "CR" or "Cr" next to them. DO NOT extract card payment/credit transactions (e.g., descriptions containing "Payment received", "Mobile Banking Payment", "Internet Banking Payment", "Auto-payment", "BBPS Payment", or any transaction representing payment of the credit card bill). However, merchant refunds or purchase reversals (which have "CR" or "Cr" next to the amount, e.g. from merchants like Amazon, Swiggy, etc.) SHOULD be extracted. Represent the amount for these refunds as a negative number (e.g. -2089.00 for "2,089.00 CR") and extract their negative reward points (e.g., -104).
 - FOR BANK ACCOUNTS: Debit transactions may be in a dedicated debit/withdrawal column, or have "Dr", "Debit", "Withdrawal", or "-" signs.
 - If the statement has a "STATEMENT SUMMARY" box, strictly extract the "Total Credits" / "Payments" / "Deposits" value for the 'total_credits' field, and use the "Purchases/Charges" or total debits for your own reference to ensure you don't over-extract.
 - REWARD POINTS: Many credit card statements have a "Reward Points" or "Points Earned" column next to each transaction. If you see such a column, extract the reward points for EACH transaction into the "reward_points" field (integer). Negative reward points (e.g., -104 for refunds) should be preserved as negative numbers. If no reward points column is visible, set "reward_points" to null for all transactions. Also compute "total_reward_points" as the sum of all extracted reward points.
@@ -61,6 +61,13 @@ Respond ONLY with a valid JSON object — no markdown, no code fences, no preamb
       "amount": 64.00,
       "cat": "Office Food",
       "reward_points": 3
+    },
+    {
+      "date": "2026-04-03",
+      "desc": "Amazon Pay IN E COMMERC (Refund)",
+      "amount": -2089.00,
+      "cat": "Shopping",
+      "reward_points": -104
     }
   ],
   "insights": [

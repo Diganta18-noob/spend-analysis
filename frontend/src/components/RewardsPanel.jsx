@@ -284,8 +284,8 @@ export default function RewardsPanel({ transactions, totalRewardPoints }) {
                         {t.cat}
                       </span>
                     </td>
-                    <td style={{ padding: "9px 12px", textAlign: "right", color: "#fca5a5", fontWeight: 600, fontFamily: "DM Mono, monospace", borderBottom: "1px solid var(--app-table-border)" }}>
-                      {fmt(t.amount)}
+                    <td style={{ padding: "9px 12px", textAlign: "right", color: t.amount < 0 ? "#34d399" : "#fca5a5", fontWeight: 600, fontFamily: "DM Mono, monospace", borderBottom: "1px solid var(--app-table-border)" }}>
+                      {t.amount < 0 ? `-${fmt(Math.abs(t.amount))}` : fmt(t.amount)}
                     </td>
                     <td style={{ padding: "9px 12px", textAlign: "right", borderBottom: "1px solid var(--app-table-border)" }}>
                       <span className={`pts-badge ${t.reward_points > 0 ? "pts-positive" : t.reward_points < 0 ? "pts-negative" : "pts-zero"}`}>
@@ -299,7 +299,9 @@ export default function RewardsPanel({ transactions, totalRewardPoints }) {
             <tfoot>
               <tr>
                 <td colSpan={3} style={{ padding: "10px 12px", color: "#64748b", fontSize: 12, borderTop: "2px solid var(--app-border)" }}>{rewardStats.txnsWithPoints.length} transactions</td>
-                <td style={{ padding: "10px 12px", textAlign: "right", color: "#f87171", fontWeight: 700, fontFamily: "DM Mono, monospace", borderTop: "2px solid var(--app-border)" }}>{fmt(rewardStats.totalSpend)}</td>
+                <td style={{ padding: "10px 12px", textAlign: "right", color: rewardStats.totalSpend < 0 ? "#34d399" : "#f87171", fontWeight: 700, fontFamily: "DM Mono, monospace", borderTop: "2px solid var(--app-border)" }}>
+                  {rewardStats.totalSpend < 0 ? `-${fmt(Math.abs(rewardStats.totalSpend))}` : fmt(rewardStats.totalSpend)}
+                </td>
                 <td style={{ padding: "10px 12px", textAlign: "right", borderTop: "2px solid var(--app-border)" }}>
                   <span className="pts-badge pts-positive" style={{ fontSize: 13, padding: "3px 10px" }}>
                     {rewardStats.totalPoints} ⭐
