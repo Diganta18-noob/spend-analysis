@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import Toast from "./Toast";
+import RewardsPanel from "./RewardsPanel";
 
 const CAT_META = {
   "Rent":               { color: "#a78bfa", icon: "🏠" },
@@ -85,6 +86,17 @@ export default function ExpenseManager({ data, onBack, backLabel, onUpdateTransa
 
   const topCat = catTotals[0];
   const highestDay = dailyData.reduce((m, d) => d.amount > m.amount ? d : m, { day: "-", amount: 0 });
+
+  // Check if reward points data exists
+  const hasRewardPoints = useMemo(() => {
+    return TRANSACTIONS.some(t => t.reward_points != null && t.reward_points !== undefined);
+  }, [TRANSACTIONS]);
+
+  const totalRewardPoints = useMemo(() => {
+    if (!hasRewardPoints) return 0;
+    return data?.total_reward_points ?? TRANSACTIONS.reduce((s, t) => s + (t.reward_points || 0), 0);
+  }, [hasRewardPoints, TRANSACTIONS, data]);
+
 
   const vendorMap = {};
   txns.forEach(t => {
@@ -220,7 +232,10 @@ export default function ExpenseManager({ data, onBack, backLabel, onUpdateTransa
             { label: "Total Debited", val: fmt(totalSpent), sub: `${txns.length} transactions`, color: "#f87171" },
             { label: "Top Category", val: topCat?.name || "—", sub: fmt(topCat?.value || 0), color: "#a78bfa" },
             { label: "Daily Average", val: fmt(dailyData.length > 0 ? Math.round(totalSpent / dailyData.length) : 0), sub: `across ${dailyData.length} days`, color: "#60a5fa" },
-            { label: "Peak Day", val: highestDay.day !== "-" ? `Day ${highestDay.day}` : "—", sub: fmt(highestDay.amount), color: "#fbbf24" },
+            ...(hasRewardPoints
+              ? [{ label: "Reward Points ⭐", val: totalRewardPoints.toLocaleString("en-IN"), sub: `from ${TRANSACTIONS.filter(t => t.reward_points > 0).length} earning txns`, color: "#fbbf24" }]
+              : [{ label: "Peak Day", val: highestDay.day !== "-" ? `Day ${highestDay.day}` : "—", sub: fmt(highestDay.amount), color: "#fbbf24" }]
+            ),
           ].map((s, i) => (
             <div key={i} style={{ ...styles.card, borderTop: `2px solid ${s.color}30` }}>
               <div style={styles.label}>{s.label}</div>
@@ -231,10 +246,12 @@ export default function ExpenseManager({ data, onBack, backLabel, onUpdateTransa
         </div>
 
         {/* TABS */}
-        <div style={{ display: "flex", gap: 4, marginBottom: 16 }}>
-          {["overview", "transactions", "vendors", "insights"].map(t => (
-            <button key={t} className={`tab-btn ${activeTab === t ? "active" : ""}`} onClick={() => setActiveTab(t)}>
-              {t.charAt(0).toUpperCase() + t.slice(1)}
+        <div style={{ display: "flex", gap: 4, marginBottom: 16, flexWrap: "wrap" }}>
+          {["overview", "transactions", "vendors", "insights", ...(hasRewardPoints ? ["rewards"] : [])].map(t => (
+            <button key={t} className={`tab-btn ${activeTab === t ? "active" : ""}`} onClick={() => setActiveTab(t)}
+              style={t === "rewards" ? { background: activeTab === "rewards" ? "linear-gradient(135deg, #92400e30, #fbbf2420)" : "transparent", borderColor: activeTab === "rewards" ? "#fbbf2440" : undefined } : undefined}
+            >
+              {t === "rewards" ? "⭐ Rewards" : t.charAt(0).toUpperCase() + t.slice(1)}
             </button>
           ))}
         </div>
@@ -477,6 +494,14 @@ export default function ExpenseManager({ data, onBack, backLabel, onUpdateTransa
               </div>
             )}
           </div>
+        )}
+
+        {/* ── REWARDS TAB ── */}
+        {activeTab === "rewards" && hasRewardPoints && (
+          <RewardsPanel
+            transactions={TRANSACTIONS}
+            totalRewardPoints={data?.total_reward_points}
+          />
         )}
       </div>
 

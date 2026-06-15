@@ -17,6 +17,7 @@ IMPORTANT RULES:
 - FOR CREDIT CARDS: Purchases/spends are normal amounts. Payments/refunds usually have "CR" or "Cr" next to them. DO NOT extract entries marked with "CR" or "Cr".
 - FOR BANK ACCOUNTS: Debit transactions may be in a dedicated debit/withdrawal column, or have "Dr", "Debit", "Withdrawal", or "-" signs.
 - If the statement has a "STATEMENT SUMMARY" box, strictly extract the "Total Credits" / "Payments" / "Deposits" value for the 'total_credits' field, and use the "Purchases/Charges" or total debits for your own reference to ensure you don't over-extract.
+- REWARD POINTS: Many credit card statements have a "Reward Points" or "Points Earned" column next to each transaction. If you see such a column, extract the reward points for EACH transaction into the "reward_points" field (integer). Negative reward points (e.g., -104 for refunds) should be preserved as negative numbers. If no reward points column is visible, set "reward_points" to null for all transactions. Also compute "total_reward_points" as the sum of all extracted reward points.
 - Dates should be in YYYY-MM-DD format; if year is unclear, infer from context. Ensure absolute accuracy for dates and check for common OCR misreads (e.g., do not misread 29 as 23, or 08 as 03).
 - Amounts should be strictly numeric (no currency symbols or CR/DR suffixes in the JSON). Keep decimals exactly as they appear in the statement (e.g., 723.20 must be 723.2, 272.58 must be 272.58). Do not round or drop decimal places!
 - ACCURACY & DEDUPLICATION: If multiple transactions have the same amount and description but occur on different dates or have different reference numbers, they are distinct transactions and you MUST extract all of them. Do not deduplicate them!
@@ -52,12 +53,14 @@ Respond ONLY with a valid JSON object — no markdown, no code fences, no preamb
   "opening_balance": 388.01,
   "closing_balance": 124.00,
   "total_credits": 36770.00,
+  "total_reward_points": 315,
   "transactions": [
     {
       "date": "2026-04-02",
       "desc": "SmartQ Canteen",
       "amount": 64.00,
-      "cat": "Office Food"
+      "cat": "Office Food",
+      "reward_points": 3
     }
   ],
   "insights": [
