@@ -5,7 +5,7 @@ export const SAMPLE_DATA = {
   opening_balance: 0,
   closing_balance: 0,
   total_credits: 20447.45,
-  total_reward_points: 346,
+  total_reward_points: 208,
   transactions: [
     { date: "2026-05-12", desc: "Amazon Pay IN E COMMERC Bangalore", amount: 2089.00, cat: "Shopping", reward_points: -104 },
     { date: "2026-05-12", desc: "Amazon Pay IN GROCERY Bangalore", amount: 73.00, cat: "Groceries", reward_points: 3 },

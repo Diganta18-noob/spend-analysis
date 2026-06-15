@@ -93,9 +93,8 @@ export default function ExpenseManager({ data, onBack, backLabel, onUpdateTransa
   }, [TRANSACTIONS]);
 
   const totalRewardPoints = useMemo(() => {
-    if (!hasRewardPoints) return 0;
-    return data?.total_reward_points ?? TRANSACTIONS.reduce((s, t) => s + (t.reward_points || 0), 0);
-  }, [hasRewardPoints, TRANSACTIONS, data]);
+    return TRANSACTIONS.reduce((s, t) => s + (t.reward_points || 0), 0);
+  }, [TRANSACTIONS]);
 
 
   const vendorMap = {};
@@ -500,7 +499,7 @@ export default function ExpenseManager({ data, onBack, backLabel, onUpdateTransa
         {activeTab === "rewards" && hasRewardPoints && (
           <RewardsPanel
             transactions={TRANSACTIONS}
-            totalRewardPoints={data?.total_reward_points}
+            totalRewardPoints={totalRewardPoints}
           />
         )}
       </div>
