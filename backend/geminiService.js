@@ -108,11 +108,52 @@ Common vendor patterns:
 
 const MAX_RETRIES = 2; // Will attempt up to 2 more times if issues detected
 
-// Fallback chain — if one model's quota is exhausted or it fails, try the next
+export const PAGE_EXTRACTION_PROMPT = `You are an expert financial analyst specialising in bank statement OCR and transaction extraction. Read the bank statement image and extract ALL debit/expense transactions.
+Do NOT skip any visible debit entries. For credit card statements, reverse transactions or merchant refunds (ending in CR/Cr) should be extracted as negative amounts.
+Exclude credit card payments or bill payments.
+Extract bank name and statement period if visible.
+Respond ONLY with a valid JSON object — no markdown, no code fences, no preamble. The structure must be:
+{
+  "bank": "Bank name if visible or null",
+  "account_holder": "Name if visible or null",
+  "period": "Period string if visible or null",
+  "opening_balance": 123.45,
+  "closing_balance": 123.45,
+  "total_credits": 123.45,
+  "total_reward_points": 100,
+  "transactions": [
+    {
+      "date": "YYYY-MM-DD",
+      "desc": "Merchant/Payee name",
+      "amount": 100.00,
+      "cat": "Category name",
+      "reward_points": 10
+    }
+  ]
+}
+Category list: Rent, Insurance, Food & Dining, Office Food, Transport, Groceries, Bills & Subscriptions, Personal Transfer, Self Transfer, Entertainment, Shopping, Healthcare, Education, Other`;
+
+export const GLOBAL_INSIGHTS_PROMPT = `You are an expert financial analyst. Read the transaction list provided in JSON format and generate exactly 6-8 specific, data-driven, and genuinely useful spend insights.
+Respond ONLY with a valid JSON object — no markdown, no code fences, no preamble. The structure must be:
+{
+  "insights": [
+    {
+      "icon": "emoji here",
+      "title": "Short insight title",
+      "body": "2-3 sentence detailed observation with specific amounts, dates, and trends based on the transactions list",
+      "badge": "Fixed|Variable|Pattern|Spike|Review|Planned|Low|High",
+      "color": "#hex color"
+    }
+  ]
+}
+Transactions:
+`;
+
+// Fallback chain — prioritize gemini-2.5-flash
 const MODEL_CHAIN = [
-  "gemini-3.5-flash",
   "gemini-2.5-flash",
   "gemini-2.5-flash-lite",
+  "gemini-3.5-flash",
   "gemini-3.1-flash-lite",
   "gemini-2.0-flash",
   "gemini-2.0-flash-lite",
@@ -232,7 +273,7 @@ async function callGeminiModel(modelName, apiKey, imageParts, promptText, temper
   return await response.json();
 }
 
-export async function analyzeStatementsServer(files) {
+export async function analyzeStatementsServer(files, prompt = AI_PROMPT) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey || apiKey === "your_gemini_api_key_here" || apiKey === "") {
     throw new Error("Missing Gemini API key. Please check your .env file.");
@@ -273,7 +314,7 @@ export async function analyzeStatementsServer(files) {
           attempt = 0;
           try {
             while (attempt <= MAX_RETRIES) {
-              const promptText = attempt === 0 ? AI_PROMPT : RETRY_PROMPT;
+              const promptText = attempt === 0 ? prompt : RETRY_PROMPT;
               const temperature = attempt === 0 ? 0.1 : 0.2 + (attempt * 0.1);
 
               console.log(`[Gemini] Model: ${usedModel} (${apiVersion}) | Attempt ${attempt + 1}/${MAX_RETRIES + 1} (temp: ${temperature})`);

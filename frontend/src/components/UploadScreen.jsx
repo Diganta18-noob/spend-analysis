@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { pingServer } from "../services/apiService";
 
-export default function UploadScreen({ onAnalyze, onUseSample, isLoading, error, theme, toggleTheme }) {
+export default function UploadScreen({ onAnalyze, onUseSample, isLoading, error, theme, toggleTheme, progressMessage }) {
   const [files, setFiles] = useState([]);
   const [isDragging, setIsDragging] = useState(false);
   const [pdfPassword, setPdfPassword] = useState("");
@@ -9,37 +9,50 @@ export default function UploadScreen({ onAnalyze, onUseSample, isLoading, error,
   const [serverStatus, setServerStatus] = useState("checking"); // checking, online, offline, waking
   const fileInputRef = useRef(null);
 
-  // Check server status on mount
-  useEffect(() => {
-    checkServer();
-  }, []);
-
-  const checkServer = async () => {
-    setServerStatus("checking");
+  const pingServerFast = async () => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 1500); // 1.5s timeout
+    const API_BASE = import.meta.env.VITE_API_URL || "/api";
     try {
-      await pingServer();
-      setServerStatus("online");
+      const res = await fetch(`${API_BASE}/ping`, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      if (!res.ok) throw new Error("Server not responding");
+      return true;
     } catch (err) {
-      setServerStatus("offline");
+      clearTimeout(timeoutId);
+      throw err;
     }
   };
 
+  // Check server status on mount
+  useEffect(() => {
+    const init = async () => {
+      setServerStatus("checking");
+      try {
+        await pingServerFast();
+        setServerStatus("online");
+      } catch (err) {
+        setServerStatus("offline");
+        wakeUpBackend();
+      }
+    };
+    init();
+  }, []);
+
   const wakeUpBackend = async () => {
-    if (serverStatus === "waking") return;
     setServerStatus("waking");
     
-    // Attempt to wake up with multiple pings (Render can be slow)
     let attempts = 0;
-    const maxAttempts = 15; // ~75 seconds total
+    const maxAttempts = 60; // 60 seconds total
     
     const poll = async () => {
       try {
-        await pingServer();
+        await pingServerFast();
         setServerStatus("online");
       } catch (err) {
         attempts++;
         if (attempts < maxAttempts) {
-          setTimeout(poll, 5000); // Try again in 5s
+          setTimeout(poll, 1000); // Try again in 1s
         } else {
           setServerStatus("offline");
           console.error("Failed to wake up server after multiple attempts");
@@ -274,7 +287,7 @@ export default function UploadScreen({ onAnalyze, onUseSample, isLoading, error,
               {serverStatus === "checking" ? "Checking Server..." : 
                serverStatus === "online" ? "Server Online" : 
                serverStatus === "offline" ? "Server Sleeping" : 
-               "Waking Up Server (30-60s)..."}
+               "Warming up (~20s)..."}
             </span>
           </div>
           
@@ -559,7 +572,7 @@ export default function UploadScreen({ onAnalyze, onUseSample, isLoading, error,
           <div style={styles.loadingSection}>
             <div style={styles.shimmerBar} />
             <p style={{ fontSize: 12, color: "#475569", textAlign: "center", marginTop: 12 }}>
-              Reading transactions from {files.length} file{files.length > 1 ? "s" : ""}… this may take 10–20 seconds.
+              {progressMessage || `Reading transactions from ${files.length} file${files.length > 1 ? "s" : ""}… this may take 10–20 seconds.`}
             </p>
           </div>
         )}

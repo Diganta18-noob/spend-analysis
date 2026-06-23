@@ -3,7 +3,7 @@ import UploadScreen from "./components/UploadScreen";
 import ExpenseManager from "./components/ExpenseManager";
 import AdminLogin from "./components/admin/AdminLogin";
 import AdminDashboard from "./components/admin/AdminDashboard";
-import { analyzeStatements } from "./services/geminiService";
+import { analyzeStatementsV2 } from "./services/geminiService";
 import { SAMPLE_DATA } from "./data/sampleData";
 import { saveAnalysis, loadAnalysis, clearAnalysis } from "./services/cacheService";
 import { updateAnalysis } from "./services/apiService";
@@ -12,6 +12,7 @@ function App() {
   const [route, setRoute] = useState(window.location.hash || "#/");
   const [data, setData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [progressMessage, setProgressMessage] = useState("");
   const [error, setError] = useState(null);
   const [theme, setTheme] = useState(localStorage.getItem("theme") || "dark");
 
@@ -72,14 +73,24 @@ function App() {
   const handleAnalyze = useCallback(async (files, pdfPasswords = {}) => {
     setError(null);
     setIsLoading(true);
+    setProgressMessage("Starting analysis...");
     try {
-      const result = await analyzeStatements(files, pdfPasswords);
+      const result = await analyzeStatementsV2(files, pdfPasswords, ({ event, data }) => {
+        if (event === "page_converted") {
+          setProgressMessage(`Converting ${data.file || "PDF"}: page ${data.page} of ${data.total}...`);
+        } else if (event === "page_extracted") {
+          setProgressMessage(`Extracting transactions: page ${data.index} of ${data.total} (${data.transactionsCount} found)...`);
+        } else if (event === "finalizing") {
+          setProgressMessage(data.message || "Redacting PII and generating insights...");
+        }
+      });
       setData(result);
       window.location.hash = "#/dashboard";
     } catch (err) {
       setError(err.message || "Failed to analyze statements. Please try again.");
     } finally {
       setIsLoading(false);
+      setProgressMessage("");
     }
   }, []);
 
@@ -157,6 +168,7 @@ function App() {
       onAnalyze={handleAnalyze}
       onUseSample={handleUseSample}
       isLoading={isLoading}
+      progressMessage={progressMessage}
       error={error}
       theme={theme}
       toggleTheme={toggleTheme}

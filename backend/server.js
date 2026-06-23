@@ -7,7 +7,7 @@ import { fileURLToPath } from "url";
 import { v4 as uuidv4 } from "uuid";
 import * as mupdf from "mupdf";
 import sharp from "sharp";
-import { analyzeStatementsServer } from "./geminiService.js";
+import { analyzeStatementsServer, PAGE_EXTRACTION_PROMPT, GLOBAL_INSIGHTS_PROMPT } from "./geminiService.js";
 import { redactPII } from "./piiRedactor.js";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
@@ -54,8 +54,8 @@ function getClientIp(req) {
 
 
 
-// --- PDF Processing Helper ---
-async function convertPdfToImages(fileBuffer, password) {
+// --- PDF Processing Helper with Progress Callback & 4-concurrency ---
+export async function convertPdfToImages(fileBuffer, password, onPageConverted = null) {
   let doc = null;
   try {
     const cleanPassword = (password || "").trim();
@@ -71,12 +71,9 @@ async function convertPdfToImages(fileBuffer, password) {
     }
     
     const count = doc.countPages();
-    const images = [];
+    const images = new Array(count);
     
     // Dynamically adjust scale and quality to stay under Vercel's 4.5MB payload limit
-    // (4.5MB limit = ~3.3MB binary limit due to base64 encoding)
-    // We use Grayscale compression to dramatically reduce size while keeping text sharp.
-    // Higher scale/resolution is preferred for accurate OCR of small text/numbers.
     let scale = 1.6;
     let quality = 80;
     
@@ -91,24 +88,36 @@ async function convertPdfToImages(fileBuffer, password) {
       quality = 75;
     }
     
-    console.log(`Processing ${count} pages with scale ${scale}x and Grayscale JPEG quality ${quality}`);
+    console.log(`Processing ${count} pages with scale ${scale}x and Grayscale JPEG quality ${quality} (concurrency limit: 4)`);
     
-    for (let i = 0; i < count; i++) {
-      const page = doc.loadPage(i);
-      const pixmap = page.toPixmap([scale, 0, 0, scale, 0, 0], mupdf.ColorSpace.DeviceRGB, false);
-      
-      const pngUint8 = pixmap.asPNG();
-      pixmap.destroy();
-      
-      // Convert to grayscale and compress to JPEG to save massive amounts of space 
-      // without losing the high resolution needed for accurate OCR.
-      const jpegBuffer = await sharp(Buffer.from(pngUint8))
-        .grayscale()
-        .jpeg({ quality })
-        .toBuffer();
-      
-      images.push(jpegBuffer);
+    let index = 0;
+    async function worker() {
+      while (index < count) {
+        const i = index++;
+        const page = doc.loadPage(i);
+        const pixmap = page.toPixmap([scale, 0, 0, scale, 0, 0], mupdf.ColorSpace.DeviceRGB, false);
+        const pngUint8 = pixmap.asPNG();
+        pixmap.destroy();
+        
+        const jpegBuffer = await sharp(Buffer.from(pngUint8))
+          .grayscale()
+          .jpeg({ quality })
+          .toBuffer();
+        
+        images[i] = jpegBuffer;
+        if (onPageConverted) {
+          try {
+            onPageConverted(i + 1, count);
+          } catch (e) {
+            console.error("Progress callback failed:", e.message);
+          }
+        }
+      }
     }
+    
+    // Concurrency limit of 4
+    const workers = Array.from({ length: Math.min(4, count) }, () => worker());
+    await Promise.all(workers);
     
     console.log(`Successfully converted PDF to ${images.length} images`);
     return images;
@@ -391,6 +400,169 @@ app.put("/api/analyses/:id", validate(updateAnalysisSchema), async (req, res) =>
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+// Get health status (Cron / Keep-alive)
+app.get("/health", (req, res) => {
+  res.json({ status: "ok", uptime: process.uptime() });
+});
+
+// Stream analysis progress via Server-Sent Events (SSE)
+app.post("/api/v2/analyze", upload.array("files", 10), validateFileTypes, async (req, res) => {
+  const ip = getClientIp(req);
+  
+  // Configure response headers for Server-Sent Events
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache, no-transform",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no"
+  });
+
+  const sendSSE = (event, data) => {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
+  try {
+    if (!req.files || req.files.length === 0) {
+      sendSSE("error", { message: "No files uploaded" });
+      return res.end();
+    }
+
+    let pdfPasswords = {};
+    try {
+      if (req.body.pdfPasswords) {
+        pdfPasswords = JSON.parse(req.body.pdfPasswords);
+      }
+    } catch (e) {}
+
+    const imageFiles = [];
+    
+    // 1. PDF to image conversion
+    for (let i = 0; i < req.files.length; i++) {
+      const file = req.files[i];
+      if (file.mimetype === "application/pdf") {
+        const password = pdfPasswords[file.originalname] || pdfPasswords[`file_${i}`] || req.body[`password_${i}`] || "";
+        
+        const pages = await convertPdfToImages(file.buffer, password, (pageNum, totalPages) => {
+          sendSSE("page_converted", { file: file.originalname, page: pageNum, total: totalPages });
+        });
+
+        if (pages === null) {
+          const isRetry = !!password;
+          sendSSE("error", { 
+            code: isRetry ? "PDF_PASSWORD_INCORRECT" : "PDF_PASSWORD_REQUIRED", 
+            message: `Password required or incorrect for "${file.originalname}"`,
+            fileName: file.originalname,
+            fileIndex: i
+          });
+          return res.end();
+        }
+
+        pages.forEach((buf, pageIdx) => {
+          imageFiles.push({
+            buffer: buf,
+            mimetype: "image/jpeg",
+            originalname: `${file.originalname}_page_${pageIdx + 1}.jpg`
+          });
+        });
+      } else {
+        imageFiles.push(file);
+      }
+    }
+
+    const totalImages = imageFiles.length;
+    let allTransactions = [];
+    let bankName = null;
+    let period = null;
+    let accountHolder = null;
+    let openingBalance = null;
+    let closingBalance = null;
+    let totalCredits = 0;
+    let totalRewardPoints = 0;
+
+    // 2. Page-by-page transaction extraction
+    for (let i = 0; i < totalImages; i++) {
+      const imgFile = imageFiles[i];
+      
+      // We run extractTransactions using analyzeStatementsServer with PAGE_EXTRACTION_PROMPT
+      const pageResult = await analyzeStatementsServer([imgFile], PAGE_EXTRACTION_PROMPT);
+      
+      if (pageResult.transactions) {
+        allTransactions.push(...pageResult.transactions);
+      }
+      if (pageResult.bank && !bankName) bankName = pageResult.bank;
+      if (pageResult.period && !period) period = pageResult.period;
+      if (pageResult.account_holder && !accountHolder) accountHolder = pageResult.account_holder;
+      
+      if (pageResult.opening_balance !== undefined && pageResult.opening_balance !== null && openingBalance === null) {
+        openingBalance = pageResult.opening_balance;
+      }
+      if (pageResult.closing_balance !== undefined && pageResult.closing_balance !== null) {
+        closingBalance = pageResult.closing_balance;
+      }
+      if (pageResult.total_credits) {
+        totalCredits += pageResult.total_credits;
+      }
+      if (pageResult.total_reward_points) {
+        totalRewardPoints += pageResult.total_reward_points;
+      }
+
+      sendSSE("page_extracted", { index: i + 1, total: totalImages, transactionsCount: pageResult.transactions?.length || 0 });
+    }
+
+    sendSSE("finalizing", { message: "Running PII redaction and generating global insights..." });
+
+    // 3. PII Redaction
+    const combinedData = {
+      bank: bankName,
+      period: period,
+      account_holder: accountHolder,
+      opening_balance: openingBalance,
+      closing_balance: closingBalance,
+      total_credits: totalCredits,
+      total_reward_points: totalRewardPoints,
+      transactions: allTransactions,
+      insights: []
+    };
+
+    const redactedData = redactPII(combinedData);
+
+    // 4. Generate global insights from JSON
+    const insightsPrompt = GLOBAL_INSIGHTS_PROMPT + JSON.stringify(redactedData.transactions.slice(0, 150)); // Slice to avoid exceeding LLM input limits
+    const insightsResult = await analyzeStatementsServer([], insightsPrompt);
+    redactedData.insights = insightsResult.insights || [];
+
+    // 5. Store in database
+    const id = uuidv4();
+    const totalSpent = (redactedData.transactions || [])
+      .filter(t => t.cat !== "Self Transfer")
+      .reduce((s, t) => s + t.amount, 0);
+
+    await insertAnalysis({
+      id,
+      period: redactedData.period,
+      bank: redactedData.bank,
+      account_holder: accountHolder || null,
+      total_spent: totalSpent,
+      transaction_count: (redactedData.transactions || []).length,
+      data: redactedData,
+      is_redacted: true,
+    });
+
+    await insertAuditLog({
+      action: "ANALYSIS_CREATED",
+      details: `Analyzed ${req.files.length} file(s). Bank: ${bankName || "Unknown"}. Period: ${period || "Unknown"}. Transactions: ${allTransactions.length}.`,
+      ip,
+    });
+
+    sendSSE("done", { id, ...redactedData });
+    res.end();
+  } catch (error) {
+    console.error("v2 analysis error:", error);
+    sendSSE("error", { message: error.message || "Failed to analyze statements" });
+    res.end();
   }
 });
 

@@ -40,6 +40,18 @@ capabilities:
 # These show how to categorize models by capability type.
 
 profiles:
+  # Primary analysis model
+  primary_analysis:
+    model: "gemini-2.5-flash"
+    speed_tier: fast
+    thinking_mode: false
+    long_context: true
+    tools: false
+    best_for:
+      - Bank statement parsing
+      - OCR text extraction
+      - Global financial insights
+
   # Fast iteration models
   fast_coder:
     speed_tier: fast
