@@ -25,17 +25,6 @@ export async function adminLogin(password) {
   return res.json();
 }
 
-export async function adminChangePassword(currentPassword, newPassword) {
-  const res = await fetch(`${API_BASE}/admin/change-password`, {
-    method: "POST",
-    headers: getAuthHeaders(),
-    body: JSON.stringify({ currentPassword, newPassword }),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || "Failed to change password");
-  return data;
-}
-
 const getAuthHeaders = () => {
   const token = sessionStorage.getItem("admin_token");
   return {
@@ -44,10 +33,34 @@ const getAuthHeaders = () => {
   };
 };
 
-export async function fetchAnalyses() {
-  const res = await fetch(`${API_BASE}/analyses?t=${Date.now()}`, {
-    headers: getAuthHeaders(),
+async function fetchWithAuth(url, options = {}) {
+  const headers = {
+    ...getAuthHeaders(),
+    ...options.headers,
+  };
+  const res = await fetch(url, { ...options, headers });
+  
+  // Extract and update refreshed token for "refresh on activity" session persistence
+  const refreshedToken = res.headers.get("X-Refreshed-Token");
+  if (refreshedToken) {
+    sessionStorage.setItem("admin_token", refreshedToken);
+  }
+  
+  return res;
+}
+
+export async function adminChangePassword(currentPassword, newPassword) {
+  const res = await fetchWithAuth(`${API_BASE}/admin/change-password`, {
+    method: "POST",
+    body: JSON.stringify({ currentPassword, newPassword }),
   });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Failed to change password");
+  return data;
+}
+
+export async function fetchAnalyses() {
+  const res = await fetchWithAuth(`${API_BASE}/analyses?t=${Date.now()}`);
   if (!res.ok) {
     if (res.status === 401) throw new Error("Unauthorized");
     throw new Error("Failed to fetch analyses");
@@ -56,9 +69,7 @@ export async function fetchAnalyses() {
 }
 
 export async function fetchStats() {
-  const res = await fetch(`${API_BASE}/stats?t=${Date.now()}`, {
-    headers: getAuthHeaders(),
-  });
+  const res = await fetchWithAuth(`${API_BASE}/stats?t=${Date.now()}`);
   if (!res.ok) {
     throw new Error("Failed to fetch stats");
   }
@@ -83,9 +94,8 @@ export async function updateAnalysis(id, data) {
 }
 
 export async function deleteAnalysis(id) {
-  const res = await fetch(`${API_BASE}/analyses/${id}`, {
+  const res = await fetchWithAuth(`${API_BASE}/analyses/${id}`, {
     method: "DELETE",
-    headers: getAuthHeaders(),
   });
   if (!res.ok) throw new Error("Failed to delete analysis");
   return res.json();
@@ -93,27 +103,22 @@ export async function deleteAnalysis(id) {
 
 // --- Audit Logs ---
 export async function fetchAuditLogs(limit = 50, offset = 0) {
-  const res = await fetch(`${API_BASE}/admin/audit-logs?limit=${limit}&offset=${offset}&t=${Date.now()}`, {
-    headers: getAuthHeaders(),
-  });
+  const res = await fetchWithAuth(`${API_BASE}/admin/audit-logs?limit=${limit}&offset=${offset}&t=${Date.now()}`);
   if (!res.ok) throw new Error("Failed to fetch audit logs");
   return res.json();
 }
 
 // --- API Usage ---
 export async function fetchApiUsage() {
-  const res = await fetch(`${API_BASE}/admin/api-usage?t=${Date.now()}`, {
-    headers: getAuthHeaders(),
-  });
+  const res = await fetchWithAuth(`${API_BASE}/admin/api-usage?t=${Date.now()}`);
   if (!res.ok) throw new Error("Failed to fetch API usage");
   return res.json();
 }
 
 // --- Log CSV Export ---
 export async function logCsvExport() {
-  const res = await fetch(`${API_BASE}/admin/log-export`, {
+  const res = await fetchWithAuth(`${API_BASE}/admin/log-export`, {
     method: "POST",
-    headers: getAuthHeaders(),
   });
   if (!res.ok) throw new Error("Failed to log export");
   return res.json();

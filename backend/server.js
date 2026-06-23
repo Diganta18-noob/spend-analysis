@@ -9,17 +9,23 @@ import * as mupdf from "mupdf";
 import sharp from "sharp";
 import { analyzeStatementsServer } from "./geminiService.js";
 import { redactPII } from "./piiRedactor.js";
+import jwt from "jsonwebtoken";
+import bcrypt from "bcryptjs";
 import {
   initDb, insertAnalysis, getAllAnalyses, getAnalysisById,
   updateAnalysis, deleteAnalysis, getStats,
   insertAuditLog, getAuditLogs,
-  getApiUsage
+  getApiUsage,
+  findAdmin, updateAdminAttempts, resetAdminAttempts, updateAdminPassword
 } from "./db.js";
-import { helmetMiddleware, createCorsMiddleware, adminRateLimit } from "./middleware/security.js";
+import { helmetMiddleware, createCorsMiddleware, adminRateLimit, loginRateLimit } from "./middleware/security.js";
 import { validate } from "./middleware/validate.js";
 import { validateFileTypes } from "./middleware/fileTypeCheck.js";
 import { loginSchema, changePasswordSchema, updateAnalysisSchema } from "./schemas.js";
 import { initSentry, sentryErrorHandler, captureException } from "./lib/sentry.js";
+import { requireAdmin } from "./middleware/auth.js";
+
+const JWT_SECRET = process.env.JWT_SECRET || "default_jwt_secret_change_me_123";
 
 dotenv.config();
 
@@ -28,7 +34,6 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const port = process.env.PORT || 3001;
-let ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin123";
 
 // --- Security middleware ---
 app.use(helmetMiddleware);
@@ -46,14 +51,7 @@ function getClientIp(req) {
   return req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket?.remoteAddress || "unknown";
 }
 
-// Middleware for simple admin auth
-const requireAdmin = (req, res, next) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || authHeader !== `Bearer ${ADMIN_PASSWORD}`) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
-  next();
-};
+
 
 
 // --- PDF Processing Helper ---
@@ -155,15 +153,51 @@ async function compressImage(fileBuffer) {
 // --- ROUTES ---
 
 // Admin Login
-app.post("/api/admin/login", adminRateLimit, validate(loginSchema), async (req, res) => {
+app.post("/api/admin/login", loginRateLimit, validate(loginSchema), async (req, res) => {
   const password = req.body.password;
   const ip = getClientIp(req);
-  if (password === ADMIN_PASSWORD) {
-    try { await insertAuditLog({ action: "ADMIN_LOGIN", details: "Admin logged in successfully", ip }); } catch (e) { console.error("Audit log failed:", e.message); }
-    res.json({ token: ADMIN_PASSWORD });
-  } else {
-    try { await insertAuditLog({ action: "ADMIN_LOGIN_FAILED", details: "Failed login attempt", ip }); } catch (e) { console.error("Audit log failed:", e.message); }
-    res.status(401).json({ error: "Invalid password" });
+  
+  try {
+    const admin = await findAdmin();
+    if (!admin) {
+      return res.status(500).json({ error: "Admin account not initialized" });
+    }
+
+    // Check account-level lock
+    if (admin.lockUntil && admin.lockUntil > new Date()) {
+      const remainingMin = Math.ceil((admin.lockUntil - new Date()) / (60 * 1000));
+      return res.status(403).json({ error: `Account temporarily locked. Try again in ${remainingMin} minutes.` });
+    }
+
+    const isMatch = await bcrypt.compare(password, admin.passwordHash);
+    if (isMatch) {
+      await resetAdminAttempts();
+      const token = jwt.sign({ username: admin.username }, JWT_SECRET, { expiresIn: "30m" });
+      
+      await insertAuditLog({ action: "ADMIN_LOGIN", details: "Admin logged in successfully", ip });
+      res.json({ token });
+    } else {
+      const newAttempts = (admin.loginAttempts || 0) + 1;
+      let lockUntil = null;
+      let message = "Invalid password";
+      
+      if (newAttempts >= 10) {
+        lockUntil = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes lockout
+        message = "Account locked due to too many failed attempts. Try again in 15 minutes.";
+      }
+      
+      await updateAdminAttempts(newAttempts, lockUntil);
+      await insertAuditLog({ 
+        action: "ADMIN_LOGIN_FAILED", 
+        details: `Failed login attempt (attempts: ${newAttempts})`, 
+        ip 
+      });
+      
+      res.status(401).json({ error: message });
+    }
+  } catch (error) {
+    console.error("Login route error:", error);
+    res.status(500).json({ error: error.message });
   }
 });
 
@@ -171,37 +205,32 @@ app.post("/api/admin/login", adminRateLimit, validate(loginSchema), async (req, 
 app.post("/api/admin/change-password", requireAdmin, validate(changePasswordSchema), async (req, res) => {
   const { currentPassword, newPassword } = req.body;
   const ip = getClientIp(req);
-  if (currentPassword !== ADMIN_PASSWORD) {
-    return res.status(401).json({ error: "Incorrect current password" });
-  }
-  if (!newPassword || newPassword.length < 4) {
-    return res.status(400).json({ error: "New password must be at least 4 characters" });
-  }
-
-  // Update in memory
-  ADMIN_PASSWORD = newPassword;
-
-  // Update .env file
+  
   try {
-    const envPath = path.join(__dirname, ".env");
-    let envContent = "";
-    if (fs.existsSync(envPath)) {
-      envContent = fs.readFileSync(envPath, "utf8");
+    const admin = await findAdmin();
+    if (!admin) {
+      return res.status(500).json({ error: "Admin account not initialized" });
     }
-    
-    if (envContent.includes("ADMIN_PASSWORD=")) {
-      envContent = envContent.replace(/ADMIN_PASSWORD=.*/g, `ADMIN_PASSWORD=${newPassword}`);
-    } else {
-      envContent += `\nADMIN_PASSWORD=${newPassword}\n`;
+
+    const isMatch = await bcrypt.compare(currentPassword, admin.passwordHash);
+    if (!isMatch) {
+      return res.status(401).json({ error: "Incorrect current password" });
     }
-    
-    fs.writeFileSync(envPath, envContent.trim() + "\n", "utf8");
+
+    if (!newPassword || newPassword.length < 4) {
+      return res.status(400).json({ error: "New password must be at least 4 characters" });
+    }
+
+    const newHash = await bcrypt.hash(newPassword, 10);
+    await updateAdminPassword(newHash);
     await insertAuditLog({ action: "PASSWORD_CHANGED", details: "Admin password was changed", ip });
-    res.json({ success: true, token: newPassword });
-  } catch (err) {
-    console.error("Failed to write to .env:", err);
-    await insertAuditLog({ action: "PASSWORD_CHANGED", details: "Admin password changed (could not persist to .env)", ip });
-    res.json({ success: true, token: newPassword, warning: "Could not persist to .env file" });
+
+    // Generate new token
+    const token = jwt.sign({ username: admin.username }, JWT_SECRET, { expiresIn: "30m" });
+    res.json({ success: true, token });
+  } catch (error) {
+    console.error("Change password route error:", error);
+    res.status(500).json({ error: error.message });
   }
 });
 

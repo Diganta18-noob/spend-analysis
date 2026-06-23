@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import bcrypt from "bcryptjs";
 
 // ────────────────────────────── Schemas ──────────────────────────────
 
@@ -33,9 +34,17 @@ const apiUsageSchema = new mongoose.Schema({
   errors:                 { type: [mongoose.Schema.Types.Mixed], default: [] }
 }, { suppressReservedKeysWarning: true });
 
+const adminSchema = new mongoose.Schema({
+  username:      { type: String, default: "admin", unique: true },
+  passwordHash:  { type: String, required: true },
+  loginAttempts: { type: Number, default: 0 },
+  lockUntil:     { type: Date }
+});
+
 const Analysis = mongoose.model("Analysis", analysisSchema);
 const AuditLog = mongoose.model("AuditLog", auditLogSchema);
 const ApiUsage = mongoose.model("ApiUsage", apiUsageSchema);
+const Admin = mongoose.model("Admin", adminSchema);
 
 // ────────────────────────────── Init ──────────────────────────────
 
@@ -51,6 +60,7 @@ export async function initDb() {
       connectTimeoutMS: 10000,
     });
     console.log("✅ Connected to MongoDB Atlas");
+    await migrateAdminPassword();
   } catch (err) {
     console.error("❌ MongoDB connection failed:", err.message);
     console.error("   Server will continue running — DB operations will fail gracefully.");
@@ -213,3 +223,49 @@ export async function getApiUsage() {
     }
   };
 }
+
+// ────────────────────────── Admin Operations ──────────────────────────
+
+export async function migrateAdminPassword() {
+  try {
+    const count = await Admin.countDocuments();
+    if (count === 0) {
+      const plainPassword = process.env.ADMIN_PASSWORD || "admin123";
+      const hash = await bcrypt.hash(plainPassword, 10);
+      await Admin.create({
+        username: "admin",
+        passwordHash: hash,
+        loginAttempts: 0
+      });
+      console.log("🔑 Default admin password migrated successfully to database.");
+    }
+  } catch (err) {
+    console.error("❌ Admin password migration failed:", err.message);
+  }
+}
+
+export async function findAdmin() {
+  return Admin.findOne({ username: "admin" }).lean();
+}
+
+export async function updateAdminAttempts(attempts, lockUntil) {
+  await Admin.updateOne(
+    { username: "admin" },
+    { $set: { loginAttempts: attempts, lockUntil } }
+  );
+}
+
+export async function resetAdminAttempts() {
+  await Admin.updateOne(
+    { username: "admin" },
+    { $set: { loginAttempts: 0, lockUntil: null } }
+  );
+}
+
+export async function updateAdminPassword(newHash) {
+  await Admin.updateOne(
+    { username: "admin" },
+    { $set: { passwordHash: newHash, loginAttempts: 0, lockUntil: null } }
+  );
+}
+
