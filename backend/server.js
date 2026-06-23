@@ -1,5 +1,4 @@
 import express from "express";
-import cors from "cors";
 import multer from "multer";
 import dotenv from "dotenv";
 import fs from "fs";
@@ -16,6 +15,11 @@ import {
   insertAuditLog, getAuditLogs,
   getApiUsage
 } from "./db.js";
+import { helmetMiddleware, createCorsMiddleware, adminRateLimit } from "./middleware/security.js";
+import { validate } from "./middleware/validate.js";
+import { validateFileTypes } from "./middleware/fileTypeCheck.js";
+import { loginSchema, changePasswordSchema, updateAnalysisSchema } from "./schemas.js";
+import { initSentry, sentryErrorHandler, captureException } from "./lib/sentry.js";
 
 dotenv.config();
 
@@ -26,7 +30,9 @@ const app = express();
 const port = process.env.PORT || 3001;
 let ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin123";
 
-app.use(cors());
+// --- Security middleware ---
+app.use(helmetMiddleware);
+app.use(createCorsMiddleware());
 app.use(express.json({ limit: "50mb" }));
 
 // Configure multer for file uploads (in-memory buffer)
@@ -149,7 +155,7 @@ async function compressImage(fileBuffer) {
 // --- ROUTES ---
 
 // Admin Login
-app.post("/api/admin/login", async (req, res) => {
+app.post("/api/admin/login", adminRateLimit, validate(loginSchema), async (req, res) => {
   const password = req.body.password;
   const ip = getClientIp(req);
   if (password === ADMIN_PASSWORD) {
@@ -162,7 +168,7 @@ app.post("/api/admin/login", async (req, res) => {
 });
 
 // Change admin password
-app.post("/api/admin/change-password", requireAdmin, async (req, res) => {
+app.post("/api/admin/change-password", requireAdmin, validate(changePasswordSchema), async (req, res) => {
   const { currentPassword, newPassword } = req.body;
   const ip = getClientIp(req);
   if (currentPassword !== ADMIN_PASSWORD) {
@@ -200,7 +206,7 @@ app.post("/api/admin/change-password", requireAdmin, async (req, res) => {
 });
 
 // Analyze new statements
-app.post("/api/analyze", upload.array("files", 10), async (req, res) => {
+app.post("/api/analyze", upload.array("files", 10), validateFileTypes, async (req, res) => {
   const ip = getClientIp(req);
   try {
     if (!req.files || req.files.length === 0) {
@@ -342,7 +348,7 @@ app.get("/api/analyses/:id", async (req, res) => {
 });
 
 // Update analysis (e.g., category edits)
-app.put("/api/analyses/:id", async (req, res) => {
+app.put("/api/analyses/:id", validate(updateAnalysisSchema), async (req, res) => {
   const ip = getClientIp(req);
   try {
     const { id } = req.params;
@@ -385,7 +391,7 @@ app.delete("/api/analyses/:id", requireAdmin, async (req, res) => {
 });
 
 // --- Admin: Audit Logs ---
-app.get("/api/admin/audit-logs", requireAdmin, async (req, res) => {
+app.get("/api/admin/audit-logs", adminRateLimit, requireAdmin, async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 50;
     const offset = parseInt(req.query.offset) || 0;
@@ -397,7 +403,7 @@ app.get("/api/admin/audit-logs", requireAdmin, async (req, res) => {
 });
 
 // --- Admin: API Usage ---
-app.get("/api/admin/api-usage", requireAdmin, async (req, res) => {
+app.get("/api/admin/api-usage", adminRateLimit, requireAdmin, async (req, res) => {
   try {
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
     const data = await getApiUsage();
@@ -408,13 +414,17 @@ app.get("/api/admin/api-usage", requireAdmin, async (req, res) => {
 });
 
 // --- Admin: CSV Export Audit ---
-app.post("/api/admin/log-export", requireAdmin, async (req, res) => {
+app.post("/api/admin/log-export", adminRateLimit, requireAdmin, async (req, res) => {
   const ip = getClientIp(req);
   await insertAuditLog({ action: "CSV_EXPORTED", details: "Admin exported analyses as CSV", ip });
   res.json({ success: true });
 });
 
-initDb().then(() => {
+// --- Sentry error handler (must be after routes) ---
+app.use(sentryErrorHandler());
+
+initDb().then(async () => {
+  await initSentry(app);
   app.listen(port, "0.0.0.0", () => {
     console.log(`Backend server running on port ${port}`);
   });

@@ -28,3 +28,9 @@ build/
 .agent/
 .agents/
 .gsd/
+
+# Test / sensitive files — never commit real statements or secrets
+*.pdf
+*.pem
+*.key
+backend/test_enc.pdf

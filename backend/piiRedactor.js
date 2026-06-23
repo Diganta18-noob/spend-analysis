@@ -16,14 +16,14 @@ export function redactPII(analysisData) {
   if (redacted.transactions && Array.isArray(redacted.transactions)) {
     redacted.transactions.forEach(t => {
       if (t.desc) {
+        // Redact Email addresses
+        t.desc = t.desc.replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, "***@***.***");
+
         // Redact UPI IDs (e.g., user@okhdfcbank -> ***@upi)
         t.desc = t.desc.replace(/[a-zA-Z0-9.\-_]+@[a-zA-Z]+/g, "***@upi");
         
         // Redact 10+ digit numbers (likely account numbers, phone numbers, or Aadhar)
         t.desc = t.desc.replace(/\b\d{10,}\b/g, "**********");
-        
-        // Redact Email addresses
-        t.desc = t.desc.replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, "***@***.***");
       }
     });
   }
