@@ -173,16 +173,66 @@ export default function UploadScreen({ onAnalyze, onUseSample, isLoading, error,
         .upload-cta:active:not(:disabled) {
           transform: translateY(0);
         }
-        .sample-link:hover {
-          color: #94a3b8 !important;
+        .sample-cta:hover:not(:disabled) {
+          border-color: var(--app-border-hover) !important;
+          background: var(--app-hover-bg) !important;
+          transform: translateY(-2px);
+          box-shadow: 0 4px 12px rgba(255, 255, 255, 0.05);
+        }
+        .sample-cta:active:not(:disabled) {
+          transform: translateY(0);
         }
         .file-remove:hover {
           background: #f87171 !important;
           color: #fff !important;
+          border-color: #f87171 !important;
         }
         .pwd-input:focus {
           border-color: #fbbf24 !important;
           box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.2);
+        }
+        .footer-link:hover {
+          color: var(--app-text) !important;
+        }
+        .preview-box:hover {
+          transform: translateY(-4px);
+          box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+        }
+        @media (max-width: 480px) {
+          .upload-actions {
+            flex-direction: column !important;
+            width: 100%;
+          }
+          .upload-actions button {
+            width: 100% !important;
+          }
+          .step-strip {
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            gap: 12px !important;
+            padding: 16px !important;
+          }
+          .step-arrow {
+            display: none !important;
+          }
+        }
+        @media (max-width: 360px) {
+          .drop-zone {
+            padding: 16px !important;
+            min-height: 140px !important;
+          }
+          .drop-title {
+            font-size: 13px !important;
+          }
+          .drop-sub {
+            font-size: 10px !important;
+          }
+          .hero-title {
+            font-size: 24px !important;
+          }
+          .hero-subtitle {
+            font-size: 12px !important;
+          }
         }
       `}</style>
 
@@ -261,15 +311,43 @@ export default function UploadScreen({ onAnalyze, onUseSample, isLoading, error,
           >
             <span style={{ fontSize: 40, animation: "float 3s ease-in-out infinite" }}>💸</span>
           </div>
-          <h1 style={styles.title}>Expense Analyzer</h1>
-          <p style={styles.subtitle}>
+          <h1 className="hero-title" style={styles.title}>Expense Analyzer</h1>
+          <p className="hero-subtitle" style={styles.subtitle}>
             Upload your bank statement screenshots and get an AI-powered spend
             analysis in seconds.
           </p>
         </div>
 
+        {/* 3-Step Process Strip */}
+        <div className="step-strip" style={styles.stepStrip}>
+          <div style={styles.stepItem}>
+            <span style={styles.stepNumber}>1</span>
+            <div style={styles.stepTextContainer}>
+              <span style={styles.stepTitle}>Upload</span>
+              <span style={styles.stepDesc}>PDFs or images</span>
+            </div>
+          </div>
+          <div className="step-arrow" style={styles.stepArrow}>➔</div>
+          <div style={styles.stepItem}>
+            <span style={styles.stepNumber}>2</span>
+            <div style={styles.stepTextContainer}>
+              <span style={styles.stepTitle}>AI Extracts</span>
+              <span style={styles.stepDesc}>Redacts & parses</span>
+            </div>
+          </div>
+          <div className="step-arrow" style={styles.stepArrow}>➔</div>
+          <div style={styles.stepItem}>
+            <span style={styles.stepNumber}>3</span>
+            <div style={styles.stepTextContainer}>
+              <span style={styles.stepTitle}>Dashboard</span>
+              <span style={styles.stepDesc}>View insights</span>
+            </div>
+          </div>
+        </div>
+
         {/* Drop Zone */}
         <div
+          className="drop-zone"
           style={{
             ...styles.dropZone,
             borderColor: isDragging ? "#fbbf24" : files.length > 0 ? "var(--app-border-hover)" : "var(--app-border)",
@@ -301,10 +379,10 @@ export default function UploadScreen({ onAnalyze, onUseSample, isLoading, error,
                   <line x1="12" y1="3" x2="12" y2="15" />
                 </svg>
               </div>
-              <div style={styles.dropTitle}>
+              <div className="drop-title" style={styles.dropTitle}>
                 Drop bank statement files here
               </div>
-              <div style={styles.dropSub}>
+              <div className="drop-sub" style={styles.dropSub}>
                 or click to browse · supports PDF, PNG, JPG, WEBP
               </div>
               <div style={{ ...styles.dropSub, marginTop: 4, color: "#34d399", fontSize: 10 }}>
@@ -427,7 +505,7 @@ export default function UploadScreen({ onAnalyze, onUseSample, isLoading, error,
         )}
 
         {/* Actions */}
-        <div style={styles.actions}>
+        <div className="upload-actions" style={styles.actions}>
           <button
             className="upload-cta"
             disabled={files.length === 0 || isLoading || serverStatus !== "online"}
@@ -454,27 +532,27 @@ export default function UploadScreen({ onAnalyze, onUseSample, isLoading, error,
                 Analyzing with AI…
               </span>
             ) : serverStatus !== "online" ? (
-              <>⚡ Wake Server First</>
+              <>⚡ Wake Server</>
             ) : (
               <>✨ Analyze Statements</>
             )}
           </button>
           
-          {serverStatus !== "online" && files.length > 0 && (
-            <div style={{ fontSize: 11, color: "#fbbf24", marginTop: -4 }}>
-              Backend is currently sleeping. Click 'Wake Up' at the top to start.
-            </div>
-          )}
-
           <button
-            className="sample-link"
+            className="sample-cta"
             onClick={onUseSample}
             disabled={isLoading}
             style={styles.sampleBtn}
           >
-            or try with sample data →
+            Try with sample data →
           </button>
         </div>
+
+        {serverStatus !== "online" && files.length > 0 && (
+          <div style={{ fontSize: 11, color: "#fbbf24", marginTop: 8, textAlign: "center" }}>
+            Backend is currently sleeping. Click 'Wake Up' at the top to start.
+          </div>
+        )}
 
         {/* Loading overlay */}
         {isLoading && (
@@ -486,6 +564,21 @@ export default function UploadScreen({ onAnalyze, onUseSample, isLoading, error,
           </div>
         )}
 
+        {/* Inline Dashboard Screenshot Preview */}
+        <div className="preview-box" style={styles.previewBox}>
+          <div style={styles.previewHeader}>
+            <span style={styles.previewDot} />
+            <span style={styles.previewDot} />
+            <span style={styles.previewDot} />
+            <span style={styles.previewTitle}>Dashboard Preview</span>
+          </div>
+          <img
+            src="/og.png"
+            alt="Dashboard Preview"
+            style={styles.previewImg}
+          />
+        </div>
+
         {/* Footer info */}
         <div style={styles.footer}>
           <div style={styles.footerItem}>
@@ -494,11 +587,27 @@ export default function UploadScreen({ onAnalyze, onUseSample, isLoading, error,
           </div>
           <div style={styles.footerItem}>
             <span>🛡️</span>
-            <span>Account numbers, names & balances are automatically scrubbed from records</span>
+            <span>Account numbers, names & balances are scrubbed from records</span>
           </div>
-          <div style={styles.footerItem}>
-            <span>⚡</span>
-            <span>Powered by Gemini 2.0 Flash with vision capabilities</span>
+          
+          <div style={styles.footerSeparator} />
+
+          <div style={styles.footerCredits}>
+            <a
+              href="https://github.com/Diganta18-noob/spend-analysis"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="footer-link"
+              style={styles.footerLink}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 4 }}>
+                <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" />
+              </svg>
+              Open source on GitHub
+            </a>
+            <span style={styles.footerBrand}>
+              Powered by Lovable AI / Gemini
+            </span>
           </div>
         </div>
       </div>
@@ -524,10 +633,10 @@ const styles = {
   },
   heroSection: {
     textAlign: "center",
-    marginBottom: 32,
+    marginBottom: 24,
   },
   iconWrap: {
-    marginBottom: 16,
+    marginBottom: 12,
   },
   title: {
     fontSize: 32,
@@ -546,6 +655,55 @@ const styles = {
     lineHeight: 1.6,
     maxWidth: 400,
     margin: "0 auto",
+  },
+  stepStrip: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    background: "rgba(255, 255, 255, 0.01)",
+    backdropFilter: "blur(8px)",
+    border: "1px solid var(--app-border)",
+    borderRadius: 16,
+    padding: "12px 16px",
+    marginBottom: 24,
+    gap: 8,
+  },
+  stepItem: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+  },
+  stepNumber: {
+    width: 20,
+    height: 20,
+    borderRadius: "50%",
+    background: "rgba(251, 191, 36, 0.1)",
+    border: "1px solid #fbbf24",
+    color: "#fbbf24",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 11,
+    fontWeight: 700,
+    flexShrink: 0,
+  },
+  stepTextContainer: {
+    display: "flex",
+    flexDirection: "column",
+  },
+  stepTitle: {
+    fontSize: 12,
+    fontWeight: 600,
+    color: "var(--app-text-h)",
+  },
+  stepDesc: {
+    fontSize: 9,
+    color: "var(--app-text-muted)",
+  },
+  stepArrow: {
+    color: "var(--app-text-darker)",
+    fontSize: 12,
   },
   dropZone: {
     border: "2px dashed var(--app-border)",
@@ -603,7 +761,7 @@ const styles = {
     width: 20,
     height: 20,
     borderRadius: "50%",
-    border: "none",
+    border: "1px solid rgba(255,255,255,0.1)",
     background: "rgba(0,0,0,0.6)",
     color: "#94a3b8",
     fontSize: 10,
@@ -682,11 +840,13 @@ const styles = {
   actions: {
     marginTop: 24,
     display: "flex",
-    flexDirection: "column",
+    flexDirection: "row",
     alignItems: "center",
     gap: 12,
+    width: "100%",
   },
   ctaBtn: {
+    flex: 1,
     width: "100%",
     padding: "14px 24px",
     borderRadius: 12,
@@ -697,15 +857,26 @@ const styles = {
     fontWeight: 700,
     fontFamily: "inherit",
     transition: "all 0.2s ease",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
   },
   sampleBtn: {
-    background: "none",
-    border: "none",
-    color: "var(--app-text-muted)",
-    fontSize: 13,
+    flex: 1,
+    width: "100%",
+    padding: "14px 24px",
+    borderRadius: 12,
+    border: "1px solid var(--app-border)",
+    background: "var(--app-card-solid)",
+    color: "var(--app-text)",
+    fontSize: 15,
+    fontWeight: 700,
     fontFamily: "inherit",
+    transition: "all 0.2s ease",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
     cursor: "pointer",
-    transition: "color 0.15s",
   },
   loadingSection: {
     marginTop: 20,
@@ -716,6 +887,41 @@ const styles = {
     background: "var(--app-shimmer-bg)",
     backgroundSize: "200% 100%",
     animation: "shimmer 1.5s ease-in-out infinite",
+  },
+  previewBox: {
+    marginTop: 32,
+    borderRadius: 12,
+    border: "1px solid var(--app-border)",
+    background: "var(--app-card-solid)",
+    overflow: "hidden",
+    boxShadow: "0 10px 30px rgba(0, 0, 0, 0.3)",
+    transition: "transform 0.3s ease, box-shadow 0.3s ease",
+    cursor: "pointer",
+  },
+  previewHeader: {
+    background: "rgba(255, 255, 255, 0.02)",
+    padding: "8px 12px",
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    borderBottom: "1px solid var(--app-border)",
+  },
+  previewDot: {
+    width: 8,
+    height: 8,
+    borderRadius: "50%",
+    background: "var(--app-text-darker)",
+  },
+  previewTitle: {
+    fontSize: 10,
+    color: "var(--app-text-muted)",
+    marginLeft: 6,
+    fontWeight: 500,
+  },
+  previewImg: {
+    width: "100%",
+    height: "auto",
+    display: "block",
   },
   footer: {
     marginTop: 40,
@@ -729,5 +935,31 @@ const styles = {
     gap: 8,
     fontSize: 11,
     color: "var(--app-text-darker)",
+  },
+  footerSeparator: {
+    height: 1,
+    background: "var(--app-border)",
+    margin: "12px 0 8px 0",
+  },
+  footerCredits: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  footerLink: {
+    color: "var(--app-text-muted)",
+    textDecoration: "none",
+    fontSize: 11,
+    fontWeight: 500,
+    display: "flex",
+    alignItems: "center",
+    transition: "color 0.2s",
+  },
+  footerBrand: {
+    fontSize: 11,
+    color: "var(--app-text-darker)",
+    fontWeight: 500,
   },
 };
