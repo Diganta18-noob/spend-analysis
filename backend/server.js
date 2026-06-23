@@ -16,14 +16,15 @@ import {
   updateAnalysis, deleteAnalysis, getStats,
   insertAuditLog, getAuditLogs,
   getApiUsage,
-  findAdmin, updateAdminAttempts, resetAdminAttempts, updateAdminPassword
+  findAdmin, updateAdminAttempts, resetAdminAttempts, updateAdminPassword,
+  getUserAnalyses, getUserStats
 } from "./db.js";
 import { helmetMiddleware, createCorsMiddleware, adminRateLimit, loginRateLimit } from "./middleware/security.js";
 import { validate } from "./middleware/validate.js";
 import { validateFileTypes } from "./middleware/fileTypeCheck.js";
 import { loginSchema, changePasswordSchema, updateAnalysisSchema } from "./schemas.js";
 import { initSentry, sentryErrorHandler, captureException } from "./lib/sentry.js";
-import { requireAdmin } from "./middleware/auth.js";
+import { requireAdmin, requireUserAuth, optionalUserAuth } from "./middleware/auth.js";
 
 const JWT_SECRET = process.env.JWT_SECRET || "default_jwt_secret_change_me_123";
 
@@ -244,7 +245,7 @@ app.post("/api/admin/change-password", requireAdmin, validate(changePasswordSche
 });
 
 // Analyze new statements
-app.post("/api/analyze", upload.array("files", 10), validateFileTypes, async (req, res) => {
+app.post("/api/analyze", optionalUserAuth, upload.array("files", 10), validateFileTypes, async (req, res) => {
   const ip = getClientIp(req);
   try {
     if (!req.files || req.files.length === 0) {
@@ -321,6 +322,7 @@ app.post("/api/analyze", upload.array("files", 10), validateFileTypes, async (re
       transaction_count: (data.transactions || []).length,
       data: redactedData, // Store the redacted version
       is_redacted: true,
+      owner_id: req.user ? req.user.id : null,
     });
 
     await insertAuditLog({
@@ -409,7 +411,7 @@ app.get("/health", (req, res) => {
 });
 
 // Stream analysis progress via Server-Sent Events (SSE)
-app.post("/api/v2/analyze", upload.array("files", 10), validateFileTypes, async (req, res) => {
+app.post("/api/v2/analyze", optionalUserAuth, upload.array("files", 10), validateFileTypes, async (req, res) => {
   const ip = getClientIp(req);
   
   // Configure response headers for Server-Sent Events
@@ -549,6 +551,7 @@ app.post("/api/v2/analyze", upload.array("files", 10), validateFileTypes, async 
       transaction_count: (redactedData.transactions || []).length,
       data: redactedData,
       is_redacted: true,
+      owner_id: req.user ? req.user.id : null,
     });
 
     await insertAuditLog({
@@ -565,6 +568,44 @@ app.post("/api/v2/analyze", upload.array("files", 10), validateFileTypes, async 
     res.end();
   }
 });
+
+// Get logged-in user's analyses
+app.get("/api/v2/me/analyses", requireUserAuth, async (req, res) => {
+  try {
+    const analyses = await getUserAnalyses(req.user.id);
+    res.json(analyses);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get logged-in user's stats
+app.get("/api/v2/me/stats", requireUserAuth, async (req, res) => {
+  try {
+    const stats = await getUserStats(req.user.id);
+    res.json(stats);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete logged-in user's own analysis
+app.delete("/api/v2/me/analyses/:id", requireUserAuth, async (req, res) => {
+  try {
+    const analysis = await getAnalysisById(req.params.id);
+    if (!analysis) {
+      return res.status(404).json({ error: "Analysis not found" });
+    }
+    if (analysis.owner_id !== req.user.id) {
+      return res.status(403).json({ error: "Unauthorized to delete this analysis" });
+    }
+    await deleteAnalysis(req.params.id);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 
 // Health check for Render
 app.get("/", (req, res) => {

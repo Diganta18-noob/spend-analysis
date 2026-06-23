@@ -57,7 +57,7 @@ export async function analyzeStatements(files, pdfPasswords = {}) {
  * @param {Function} onProgress - Callback function that receives { event, data }
  * @returns {Promise<object>} - The final analysis result
  */
-export async function analyzeStatementsV2(files, pdfPasswords = {}, onProgress) {
+export async function analyzeStatementsV2(files, pdfPasswords = {}, onProgress, userToken = null) {
   const formData = new FormData();
 
   if (Object.keys(pdfPasswords).length > 0) {
@@ -68,8 +68,14 @@ export async function analyzeStatementsV2(files, pdfPasswords = {}, onProgress) 
     formData.append("files", file);
   }
 
+  const headers = {};
+  if (userToken) {
+    headers["Authorization"] = `Bearer ${userToken}`;
+  }
+
   const response = await fetch(`${API_BASE}/v2/analyze`, {
     method: "POST",
+    headers,
     body: formData,
   });
 

@@ -138,3 +138,39 @@ export async function pingServer() {
     throw err;
   }
 }
+
+// --- User Account Endpoints ---
+export async function fetchUserAnalyses(userToken) {
+  const res = await fetch(`${API_BASE}/v2/me/analyses`, {
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${userToken}`,
+    },
+  });
+  if (!res.ok) throw new Error("Failed to fetch user history");
+  return res.json();
+}
+
+export async function fetchUserStats(userToken) {
+  const res = await fetch(`${API_BASE}/v2/me/stats`, {
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${userToken}`,
+    },
+  });
+  if (!res.ok) throw new Error("Failed to fetch user statistics");
+  return res.json();
+}
+
+export async function deleteUserAnalysis(id, userToken) {
+  const res = await fetch(`${API_BASE}/v2/me/analyses/${id}`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${userToken}`,
+    },
+  });
+  if (!res.ok) throw new Error("Failed to delete analysis");
+  return res.json();
+}
+
+

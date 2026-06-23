@@ -3,12 +3,16 @@ import UploadScreen from "./components/UploadScreen";
 import ExpenseManager from "./components/ExpenseManager";
 import AdminLogin from "./components/admin/AdminLogin";
 import AdminDashboard from "./components/admin/AdminDashboard";
+import Navbar from "./components/Navbar";
+import HistoryScreen from "./components/HistoryScreen";
+import { useAuth } from "./components/auth/AuthProvider";
 import { analyzeStatementsV2 } from "./services/geminiService";
 import { SAMPLE_DATA } from "./data/sampleData";
 import { saveAnalysis, loadAnalysis, clearAnalysis } from "./services/cacheService";
 import { updateAnalysis } from "./services/apiService";
 
 function App() {
+  const { getToken } = useAuth();
   const [route, setRoute] = useState(window.location.hash || "#/");
   const [data, setData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -75,6 +79,7 @@ function App() {
     setIsLoading(true);
     setProgressMessage("Starting analysis...");
     try {
+      const token = await getToken();
       const result = await analyzeStatementsV2(files, pdfPasswords, ({ event, data }) => {
         if (event === "page_converted") {
           setProgressMessage(`Converting ${data.file || "PDF"}: page ${data.page} of ${data.total}...`);
@@ -83,7 +88,7 @@ function App() {
         } else if (event === "finalizing") {
           setProgressMessage(data.message || "Redacting PII and generating insights...");
         }
-      });
+      }, token);
       setData(result);
       window.location.hash = "#/dashboard";
     } catch (err) {
@@ -92,7 +97,7 @@ function App() {
       setIsLoading(false);
       setProgressMessage("");
     }
-  }, []);
+  }, [getToken]);
 
   const handleUseSample = useCallback(() => {
     setData({ id: "sample", ...SAMPLE_DATA });
@@ -127,6 +132,15 @@ function App() {
     });
   }, []);
 
+  const handleNavigate = useCallback((newHash) => {
+    window.location.hash = newHash;
+  }, []);
+
+  const handleSelectAnalysis = useCallback((selectedData) => {
+    setData(selectedData);
+    window.location.hash = "#/dashboard";
+  }, []);
+
   // ROUTING
   if (route.startsWith("#/admin")) {
     const hasToken = !!sessionStorage.getItem("admin_token");
@@ -150,29 +164,51 @@ function App() {
     return <AdminDashboard />;
   }
 
-  if (route === "#/dashboard" && data) {
-    return (
+  let body = null;
+  if (route === "#/history") {
+    body = (
+      <HistoryScreen
+        onSelectAnalysis={handleSelectAnalysis}
+        onBack={() => handleNavigate("#/")}
+        theme={theme}
+      />
+    );
+  } else if (route === "#/dashboard" && data) {
+    body = (
       <ExpenseManager 
         data={data} 
         onBack={handleBack} 
         onUpdateTransaction={handleUpdateTransaction} 
         onBatchUpdateCategory={handleBatchUpdateCategory}
         theme={theme}
-        toggleTheme={toggleTheme}
+      />
+    );
+  } else {
+    body = (
+      <UploadScreen
+        onAnalyze={handleAnalyze}
+        onUseSample={handleUseSample}
+        isLoading={isLoading}
+        progressMessage={progressMessage}
+        error={error}
+        theme={theme}
       />
     );
   }
 
   return (
-    <UploadScreen
-      onAnalyze={handleAnalyze}
-      onUseSample={handleUseSample}
-      isLoading={isLoading}
-      progressMessage={progressMessage}
-      error={error}
-      theme={theme}
-      toggleTheme={toggleTheme}
-    />
+    <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
+      <Navbar
+        currentRoute={route}
+        onNavigate={handleNavigate}
+        hasData={!!data}
+        theme={theme}
+        toggleTheme={toggleTheme}
+      />
+      <div style={{ flex: 1 }}>
+        {body}
+      </div>
+    </div>
   );
 }
 

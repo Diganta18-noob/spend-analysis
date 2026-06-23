@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs";
 
 const analysisSchema = new mongoose.Schema({
   id:                { type: String, required: true, unique: true },
+  owner_id:          { type: String, index: true, default: null }, // Nullable for legacy/anonymous
   period:            String,
   bank:              String,
   account_holder:    String,
@@ -41,10 +42,17 @@ const adminSchema = new mongoose.Schema({
   lockUntil:     { type: Date }
 });
 
+const userSchema = new mongoose.Schema({
+  id:         { type: String, required: true, unique: true }, // Clerk user ID
+  email:      String,
+  created_at: { type: Date, default: Date.now }
+});
+
 const Analysis = mongoose.model("Analysis", analysisSchema);
 const AuditLog = mongoose.model("AuditLog", auditLogSchema);
 const ApiUsage = mongoose.model("ApiUsage", apiUsageSchema);
 const Admin = mongoose.model("Admin", adminSchema);
+const User = mongoose.model("User", userSchema);
 
 // ────────────────────────────── Init ──────────────────────────────
 
@@ -267,5 +275,62 @@ export async function updateAdminPassword(newHash) {
     { username: "admin" },
     { $set: { passwordHash: newHash, loginAttempts: 0, lockUntil: null } }
   );
+}
+
+// User operations
+export async function upsertUser(id, email) {
+  return User.findOneAndUpdate(
+    { id },
+    { $set: { email } },
+    { upsert: true, new: true }
+  );
+}
+
+export async function getUserAnalyses(ownerId) {
+  const docs = await Analysis.find({ owner_id: ownerId })
+    .select("id created_at period bank account_holder total_spent transaction_count is_redacted")
+    .sort({ created_at: -1 })
+    .lean();
+
+  return docs.map(a => ({
+    id: a.id,
+    created_at: a.created_at,
+    period: a.period,
+    bank: a.bank,
+    account_holder: a.account_holder,
+    total_spent: a.total_spent,
+    transaction_count: a.transaction_count,
+    is_redacted: a.is_redacted
+  }));
+}
+
+export async function getUserStats(ownerId) {
+  const analyses = await Analysis.find({ owner_id: ownerId })
+    .select("total_spent transaction_count bank")
+    .lean();
+
+  const total_analyses = analyses.length;
+  const total_spend_tracked = analyses.reduce((sum, a) => sum + (a.total_spent || 0), 0);
+  const total_transactions = analyses.reduce((sum, a) => sum + (a.transaction_count || 0), 0);
+  const avg_transactions = total_analyses > 0 ? total_transactions / total_analyses : 0;
+
+  const bankCounts = {};
+  analyses.forEach(a => {
+    if (a.bank) bankCounts[a.bank] = (bankCounts[a.bank] || 0) + 1;
+  });
+
+  let top_bank = "N/A";
+  let maxCount = 0;
+  for (const [bank, count] of Object.entries(bankCounts)) {
+    if (count > maxCount) { maxCount = count; top_bank = bank; }
+  }
+
+  return {
+    total_analyses,
+    total_spend_tracked,
+    avg_transactions: Math.round(avg_transactions),
+    total_transactions,
+    top_bank
+  };
 }
 
