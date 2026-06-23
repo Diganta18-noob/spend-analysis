@@ -2,8 +2,7 @@
  * Sentry integration — completely no-op if SENTRY_DSN is not set.
  */
 let Sentry = null;
-
-export function initSentry(app) {
+export async function initSentry(app) {
   const dsn = process.env.SENTRY_DSN;
   if (!dsn) {
     console.log("[Sentry] SENTRY_DSN not set — error tracking disabled.");
@@ -19,7 +18,6 @@ export function initSentry(app) {
     console.warn("[Sentry] Failed to initialize:", err.message);
   }
 }
-
 export function sentryErrorHandler() {
   if (Sentry?.setupExpressErrorHandler) {
     // Returns a proper Express error middleware array
