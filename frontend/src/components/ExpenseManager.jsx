@@ -250,6 +250,66 @@ export default function ExpenseManager({ data, onBack, backLabel, onUpdateTransa
           </div>
         </div>
 
+        {/* EMPTY STATE */}
+        {TRANSACTIONS.length === 0 ? (
+          <div style={{
+            textAlign: "center",
+            padding: "60px 24px",
+            background: "var(--app-card-bg)",
+            border: "1px solid var(--app-border)",
+            borderRadius: 16,
+            marginBottom: 20,
+          }}>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>📄</div>
+            <h2 style={{
+              fontSize: 20,
+              fontWeight: 700,
+              marginBottom: 8,
+              background: "linear-gradient(135deg, var(--app-text-h) 0%, var(--app-text-darker) 100%)",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+            }}>
+              No Transactions Found
+            </h2>
+            <p style={{ fontSize: 14, color: "var(--app-text-muted)", maxWidth: 400, margin: "0 auto 24px", lineHeight: 1.6 }}>
+              The AI could not extract any debit transactions from your statement. This can happen with unclear images, non-standard formats, or credit-only statements.
+            </p>
+            <div style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+              alignItems: "center",
+              fontSize: 12,
+              color: "var(--app-text-darker)",
+              marginBottom: 24,
+            }}>
+              <div>💡 Try uploading a higher resolution image</div>
+              <div>💡 Ensure the statement shows debit/expense entries</div>
+              <div>💡 For PDFs, ensure pages are not heavily scanned or skewed</div>
+            </div>
+            {onBack && (
+              <button
+                className="back-btn"
+                onClick={onBack}
+                style={{
+                  padding: "10px 24px",
+                  borderRadius: 10,
+                  border: "1px solid #fbbf24",
+                  background: "rgba(251, 191, 36, 0.08)",
+                  color: "#fbbf24",
+                  fontSize: 14,
+                  fontWeight: 700,
+                  fontFamily: "inherit",
+                  cursor: "pointer",
+                  transition: "all 0.2s",
+                }}
+              >
+                ← Try Again
+              </button>
+            )}
+          </div>
+        ) : (
+        <>
         {/* STAT CARDS */}
         <div className="grid-4" style={{ marginBottom: 20 }}>
           {[
@@ -541,6 +601,8 @@ export default function ExpenseManager({ data, onBack, backLabel, onUpdateTransa
             transactions={TRANSACTIONS}
             totalRewardPoints={totalRewardPoints}
           />
+        )}
+        </>
         )}
       </div>
 

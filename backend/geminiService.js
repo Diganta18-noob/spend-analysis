@@ -1,31 +1,47 @@
 import fetch from "node-fetch";
 import { recordApiCall } from "./db.js";
 
-const AI_PROMPT = `You are an expert financial analyst specialising in personal bank statement analysis for Indian users.
+const AI_PROMPT = `You are a highly accurate bank statement analysis engine specialising in Indian bank statements and credit card statements.
 
-The user has uploaded one or more photos or PDF documents of their bank account statement. Your task is to:
-1. Carefully read every transaction visible in the provided documents
-2. Extract ALL debit/expense transactions (ignore credits/deposits)
-3. Categorise each transaction intelligently into one of these categories:
-   - Rent, Insurance, Food & Dining, Office Food, Transport, Groceries, Bills & Subscriptions, Personal Transfer, Self Transfer, Entertainment, Shopping, Healthcare, Education, Other
-4. Identify the statement period (from/to dates) and bank name if visible
-5. Produce a complete spend analysis
+PRIMARY RULE: Accuracy of numbers is MORE IMPORTANT than explanations. Never estimate, round, infer, or invent amounts.
 
-IMPORTANT RULES:
-- Extract EVERY debit/expense transaction visible — do not skip any
-- Look very carefully at the document — it may be a bank account ledger, or a CREDIT CARD statement.
+TASK: Analyze the uploaded bank statement image(s) and extract ALL transactions exactly as written.
+
+STRICT ACCURACY RULES:
+1. Read every transaction line carefully — character by character for amounts.
+2. Preserve transaction dates, descriptions, debit amounts, credit amounts, and balances EXACTLY as they appear.
+3. NEVER modify, round, or approximate any number. 723.20 must be 723.2 (not 723 or 723.00). 272.58 must be 272.58.
+4. NEVER merge two transactions into one.
+5. NEVER skip any transaction — even partial or unclear ones.
+6. If a number is unclear or partially visible, mark the transaction with "uncertain": true instead of guessing.
+7. Dates MUST be in YYYY-MM-DD format. If the year is ambiguous, infer from surrounding context but NEVER fabricate dates.
+8. Check for common OCR misreads: do not misread 29 as 23, 08 as 03, 6 as 8, 1 as 7, 5 as 3, etc.
+
+SELF-VERIFICATION (MANDATORY):
+Before producing the final output, perform this check:
+- Sum up ALL extracted transaction amounts (debits as positive, refunds as negative)
+- If the statement has a "Purchases / Charges" or "Total Debits" total in any summary box, compare your sum against it
+- Also verify: Opening Balance + Total Credits - Total Debits ≈ Closing Balance
+- If the equation does NOT balance, re-scan the pages to find the missing or incorrectly extracted transaction and FIX it before returning results
+
+STATEMENT TYPE DETECTION:
+- Look very carefully at the document — it may be a BANK ACCOUNT ledger or a CREDIT CARD statement.
 - FOR CREDIT CARDS: Purchases/spends are normal amounts. Payments/refunds usually have "CR" or "Cr" next to them. DO NOT extract card payment/credit transactions (e.g., descriptions containing "Payment received", "Mobile Banking Payment", "Internet Banking Payment", "Auto-payment", "BBPS Payment", or any transaction representing payment of the credit card bill). However, merchant refunds or purchase reversals (which have "CR" or "Cr" next to the amount, e.g. from merchants like Amazon, Swiggy, etc.) SHOULD be extracted. Represent the amount for these refunds as a negative number (e.g. -2089.00 for "2,089.00 CR") and extract their negative reward points (e.g., -104).
 - FOR BANK ACCOUNTS: Debit transactions may be in a dedicated debit/withdrawal column, or have "Dr", "Debit", "Withdrawal", or "-" signs.
 - If the statement has a "STATEMENT SUMMARY" box, strictly extract the "Total Credits" / "Payments" / "Deposits" value for the 'total_credits' field, and use the "Purchases/Charges" or total debits for your own reference to ensure you don't over-extract.
-- REWARD POINTS: Many credit card statements have a "Reward Points" or "Points Earned" column next to each transaction. If you see such a column, extract the reward points for EACH transaction into the "reward_points" field (integer). Negative reward points (e.g., -104 for refunds) should be preserved as negative numbers. If no reward points column is visible, set "reward_points" to null for all transactions. Also compute "total_reward_points" as the sum of all extracted reward points.
-- Dates should be in YYYY-MM-DD format; if year is unclear, infer from context. Ensure absolute accuracy for dates and check for common OCR misreads (e.g., do not misread 29 as 23, or 08 as 03).
-- Amounts should be strictly numeric (no currency symbols or CR/DR suffixes in the JSON). Keep decimals exactly as they appear in the statement (e.g., 723.20 must be 723.2, 272.58 must be 272.58). Do not round or drop decimal places!
-- ACCURACY & DEDUPLICATION: If multiple transactions have the same amount and description but occur on different dates or have different reference numbers, they are distinct transactions and you MUST extract all of them. Do not deduplicate them!
-- PAGE BOUNDARIES: Check reference/transaction numbers. If a transaction at the bottom of one page is printed again at the top of the next page with the exact same date, description, reference number, and amount, it is a page boundary duplicate and must be extracted only once. But if the reference number or date is different, they are separate transactions.
-- SELF-VERIFICATION: Before producing the final output, sum up all transaction amounts you have extracted. If the statement has a "Purchases / Charges" or "Total Debits" total in the summary box, compare your sum to that total. If they do not match, re-scan the pages to find the discrepancy (missed transaction or incorrect amount) and fix it.
-- Vendor names should be clean and concise (max 40 chars)
-- Even if the image quality is poor, try your best to read every line item
-- If a page appears to be a continuation, still extract all visible transactions
+
+REWARD POINTS:
+- Many credit card statements have a "Reward Points" or "Points Earned" column next to each transaction. If you see such a column, extract the reward points for EACH transaction into the "reward_points" field (integer). Negative reward points (e.g., -104 for refunds) should be preserved as negative numbers. If no reward points column is visible, set "reward_points" to null for all transactions. Also compute "total_reward_points" as the sum of all extracted reward points.
+
+DEDUPLICATION & PAGE BOUNDARIES:
+- If multiple transactions have the same amount and description but occur on DIFFERENT dates or have DIFFERENT reference numbers, they are DISTINCT transactions — extract ALL of them.
+- If a transaction at the bottom of one page is printed again at the top of the next page with the EXACT same date, description, reference number, AND amount, it is a page boundary duplicate — extract only once.
+- When in doubt, extract the transaction. False positives are better than missed transactions.
+
+DESCRIPTION RULES:
+- Vendor/payee names should be clean and concise (max 40 chars)
+- Remove internal reference numbers and system codes from descriptions
+- Preserve enough detail to identify the vendor/purpose
 
 CATEGORY RULES (VERY IMPORTANT — follow strictly):
 - "Self Transfer": ONLY use when money moves between the SAME person's own accounts (e.g., "NEFT to self", "Transfer to own savings", "Fund Transfer to own A/C"). This should be RARE.
@@ -60,14 +76,16 @@ Respond ONLY with a valid JSON object — no markdown, no code fences, no preamb
       "desc": "SmartQ Canteen",
       "amount": 64.00,
       "cat": "Office Food",
-      "reward_points": 3
+      "reward_points": 3,
+      "uncertain": false
     },
     {
       "date": "2026-04-03",
       "desc": "Amazon Pay IN E COMMERC (Refund)",
       "amount": -2089.00,
       "cat": "Shopping",
-      "reward_points": -104
+      "reward_points": -104,
+      "uncertain": false
     }
   ],
   "insights": [
@@ -81,7 +99,7 @@ Respond ONLY with a valid JSON object — no markdown, no code fences, no preamb
   ]
 }
 
-CRITICAL: The transactions array MUST NOT be empty if there are any debit entries visible in the statement. Carefully scan every row of data.
+CRITICAL: The transactions array MUST NOT be empty if there are any debit entries visible in the statement. Carefully scan every row of data. Even if image quality is poor, try your best to read every line item.
 
 Generate 6-8 insights that are specific, data-driven, and genuinely useful. Reference actual amounts and payees from the data. Highlight patterns, anomalies, and actionable observations.`;
 
@@ -108,10 +126,27 @@ Common vendor patterns:
 
 const MAX_RETRIES = 2; // Will attempt up to 2 more times if issues detected
 
-export const PAGE_EXTRACTION_PROMPT = `You are an expert financial analyst specialising in bank statement OCR and transaction extraction. Read the bank statement image and extract ALL debit/expense transactions.
-Do NOT skip any visible debit entries. For credit card statements, reverse transactions or merchant refunds (ending in CR/Cr) should be extracted as negative amounts.
-Exclude credit card payments or bill payments.
-Extract bank name and statement period if visible.
+export const PAGE_EXTRACTION_PROMPT = `You are a highly accurate bank statement OCR and transaction extraction engine.
+
+PRIMARY RULE: Accuracy of numbers is MORE IMPORTANT than speed. Never estimate, round, infer, or invent amounts.
+
+STRICT RULES:
+1. Read every transaction line character by character for amounts.
+2. Preserve dates, descriptions, amounts, and balances EXACTLY as they appear in the document.
+3. NEVER modify any number. 723.20 must stay 723.2, 272.58 must stay 272.58.
+4. NEVER merge transactions. NEVER skip transactions.
+5. If a number is unclear or partially visible, set "uncertain": true on that transaction instead of guessing.
+6. Dates must be in YYYY-MM-DD format. If the year is ambiguous, infer from context.
+7. Check for OCR misreads: don't confuse 29/23, 08/03, 6/8, 1/7, 5/3.
+8. Extract ALL debit/expense transactions — do not skip any visible debit entry.
+9. For credit card statements: merchant refunds (ending in CR/Cr) should be extracted as NEGATIVE amounts. Exclude card bill payments ("Payment received", "Mobile Banking Payment", etc.).
+10. For bank accounts: debit transactions may be in a debit/withdrawal column, or have "Dr", "Debit", "Withdrawal", or "-" signs.
+11. If a "STATEMENT SUMMARY" box is visible, extract "Total Credits" for the total_credits field.
+12. REWARD POINTS: If a reward points column is visible, extract points per transaction. Otherwise set reward_points to null.
+
+CATEGORY LIST: Rent, Insurance, Food & Dining, Office Food, Transport, Groceries, Bills & Subscriptions, Personal Transfer, Self Transfer, Entertainment, Shopping, Healthcare, Education, Other
+- "Self Transfer" is ONLY for transfers to the SAME person's own accounts. UPI/NEFT to other people = "Personal Transfer".
+
 Respond ONLY with a valid JSON object — no markdown, no code fences, no preamble. The structure must be:
 {
   "bank": "Bank name if visible or null",
@@ -124,23 +159,27 @@ Respond ONLY with a valid JSON object — no markdown, no code fences, no preamb
   "transactions": [
     {
       "date": "YYYY-MM-DD",
-      "desc": "Merchant/Payee name",
+      "desc": "Merchant/Payee name (max 40 chars)",
       "amount": 100.00,
       "cat": "Category name",
-      "reward_points": 10
+      "reward_points": 10,
+      "uncertain": false
     }
   ]
 }
-Category list: Rent, Insurance, Food & Dining, Office Food, Transport, Groceries, Bills & Subscriptions, Personal Transfer, Self Transfer, Entertainment, Shopping, Healthcare, Education, Other`;
+CRITICAL: The transactions array MUST NOT be empty if there are any debit entries visible. Even for poor quality images, extract what you can and mark unclear items as uncertain.`;
 
 export const GLOBAL_INSIGHTS_PROMPT = `You are an expert financial analyst. Read the transaction list provided in JSON format and generate exactly 6-8 specific, data-driven, and genuinely useful spend insights.
+
+IMPORTANT: Reference EXACT amounts and dates from the data — do not estimate or round. Every insight must cite specific numbers directly from the transaction list.
+
 Respond ONLY with a valid JSON object — no markdown, no code fences, no preamble. The structure must be:
 {
   "insights": [
     {
       "icon": "emoji here",
       "title": "Short insight title",
-      "body": "2-3 sentence detailed observation with specific amounts, dates, and trends based on the transactions list",
+      "body": "2-3 sentence detailed observation with EXACT specific amounts, dates, and trends based on the transactions list",
       "badge": "Fixed|Variable|Pattern|Spike|Review|Planned|Low|High",
       "color": "#hex color"
     }

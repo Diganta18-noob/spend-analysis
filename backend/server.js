@@ -305,6 +305,14 @@ app.post("/api/analyze", optionalUserAuth, upload.array("files", 10), validateFi
 
     const data = await analyzeStatementsServer(processedFiles);
 
+    // Validate: if AI returned zero transactions, return an error instead of blank data
+    if (!data.transactions || data.transactions.length === 0) {
+      console.warn("[V1] Analysis returned 0 transactions — returning error to client");
+      return res.status(422).json({ 
+        error: "No transactions could be extracted from the uploaded statement. The image may be unclear, or the document may not contain readable transaction data. Please try uploading a clearer image." 
+      });
+    }
+
     const id = uuidv4();
     const totalSpent = (data.transactions || [])
       .filter(t => t.cat !== "Self Transfer")
@@ -514,6 +522,27 @@ app.post("/api/v2/analyze", optionalUserAuth, upload.array("files", 10), validat
       }
 
       sendSSE("page_extracted", { index: i + 1, total: totalImages, transactionsCount: pageResult.transactions?.length || 0 });
+    }
+
+    // Validate: if zero transactions were extracted across all pages, send error
+    if (allTransactions.length === 0) {
+      console.warn("[V2] Analysis returned 0 transactions across all pages — sending error to client");
+      sendSSE("error", { 
+        message: "No transactions could be extracted from the uploaded statement. The image may be unclear, or the document may not contain readable transaction data. Please try uploading a clearer image." 
+      });
+      return res.end();
+    }
+
+    // Self-verification: log balance equation check
+    if (openingBalance != null && closingBalance != null) {
+      const totalDebits = allTransactions.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
+      const totalRefunds = allTransactions.filter(t => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0);
+      const expectedClosing = openingBalance + totalCredits - totalDebits + totalRefunds;
+      const balanceDiff = Math.abs(expectedClosing - closingBalance);
+      console.log(`[V2] Balance verification: Opening(${openingBalance}) + Credits(${totalCredits}) - Debits(${totalDebits}) + Refunds(${totalRefunds}) = ${expectedClosing} | Actual Closing: ${closingBalance} | Diff: ${balanceDiff.toFixed(2)}`);
+      if (balanceDiff > 1) {
+        console.warn(`[V2] ⚠️ Balance mismatch of ₹${balanceDiff.toFixed(2)} — possible missing or incorrect transaction`);
+      }
     }
 
     sendSSE("finalizing", { message: "Running PII redaction and generating global insights..." });
