@@ -55,14 +55,12 @@ function App() {
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
 
-  // Load cached analysis on mount
+  // Clear cached analysis on mount to start fresh on reload
   useEffect(() => {
-    const cached = loadAnalysis();
-    if (cached) {
-      setData(cached);
-      if (route === "#/dashboard") {
-        window.location.hash = "#/dashboard";
-      }
+    clearAnalysis();
+    setData(null);
+    if (window.location.hash === "#/dashboard") {
+      window.location.hash = "#/";
     }
   }, []);
 
