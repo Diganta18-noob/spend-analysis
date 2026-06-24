@@ -17,6 +17,8 @@ STRICT ACCURACY RULES:
 7. Dates MUST be in YYYY-MM-DD format. If the year is ambiguous, infer from surrounding context but NEVER fabricate dates.
 8. Check for common OCR misreads: do not misread 29 as 23, 08 as 03, 6 as 8, 1 as 7, 5 as 3, etc.
 9. DO NOT extract illustrative examples, terms & conditions, interest/fee calculation tables, or sample transactions that are printed as explanations at the back of the statement. Only extract actual transactions charged to the account during the statement period.
+10. SIGN CONVENTION: Spends, purchases, and debit transactions MUST be represented as positive numbers. Merchant refunds, credits, or purchase reversals MUST be represented as negative numbers. NEVER swap them (do not make a spend negative or a refund positive).
+11. EXCLUDE CREDIT CARD BILL PAYMENTS: Do not extract payments representing the user paying their credit card bill (e.g., "Payment received", "Mobile Banking Payment", "Internet Banking Payment", "Auto-payment", "BBPS Payment", or similar bank transfers to the credit card). Only spends and merchant refunds should be extracted.
 
 SELF-VERIFICATION (MANDATORY):
 Before producing the final output, perform this check:
@@ -140,8 +142,8 @@ STRICT RULES:
 6. Dates must be in YYYY-MM-DD format. If the year is ambiguous, infer from context.
 7. Check for OCR misreads: don't confuse 29/23, 08/03, 6/8, 1/7, 5/3.
 8. Extract ALL debit/expense transactions — do not skip any visible debit entry.
-9. For credit card statements: merchant refunds (ending in CR/Cr) should be extracted as NEGATIVE amounts. Exclude card bill payments ("Payment received", "Mobile Banking Payment", etc.).
-10. For bank accounts: debit transactions may be in a debit/withdrawal column, or have "Dr", "Debit", "Withdrawal", or "-" signs.
+9. SIGN CONVENTION & BILL PAYMENTS: Spends, purchases, and debit transactions MUST be represented as POSITIVE numbers. Merchant refunds, credits, or purchase reversals (often ending in CR/Cr) MUST be represented as NEGATIVE numbers. NEVER swap them.
+10. EXCLUDE CREDIT CARD BILL PAYMENTS: Do not extract payments representing the user paying their credit card bill (e.g., "Payment received", "Mobile Banking Payment", "Internet Banking Payment", "Auto-payment", "BBPS Payment", or similar bank transfers to the credit card). Only spends and merchant refunds should be extracted.
 11. If a "STATEMENT SUMMARY" box is visible, extract "Total Credits" for the total_credits field.
 12. REWARD POINTS: Look for a column containing reward points (often labeled 'Reward Points' or 'Points Earned' on page 1, but may appear without headers on subsequent pages). If you see a column of integers next to the amounts representing points earned/reversed, extract them for each transaction into the 'reward_points' field (preserving negative numbers for refunds). If no such column exists, set it to null. For page continuations where headers are missing, identify the reward points column based on its relative position to the amount column or from the values (typically small integers, or negative numbers for refunds).
 13. DO NOT extract illustrative examples, terms & conditions, interest/fee calculation tables, or sample transactions that are printed as explanations at the back of the statement. Only extract actual transactions charged to the account during the statement period.

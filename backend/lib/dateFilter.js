@@ -85,19 +85,67 @@ export function parseSingleDate(dateStr, contextStr = "") {
 
 export function filterTransactionsByPeriod(transactions, periodStr) {
   if (!transactions || !Array.isArray(transactions)) return [];
+  
+  // 1. Try parsing full range
   const range = parsePeriod(periodStr);
-  if (!range) {
-    return transactions.filter(t => t.date && !isNaN(new Date(t.date).getTime()));
+  if (range) {
+    const startMs = range.startDate.getTime() - (5 * 24 * 60 * 60 * 1000); // 5-day buffer before
+    const endMs = range.endDate.getTime() + (5 * 24 * 60 * 60 * 1000);     // 5-day buffer after
+    
+    return transactions.filter(t => {
+      if (!t.date) return false;
+      const txDate = new Date(t.date);
+      const txMs = txDate.getTime();
+      if (isNaN(txMs)) return false;
+      return txMs >= startMs && txMs <= endMs;
+    });
   }
+
+  // 2. Fallback: Year-based filtering
+  // Extract all 4-digit years from periodStr starting with 20 (e.g. 2023, 2026)
+  const yearsInPeriod = periodStr ? (periodStr.match(/\b20\d{2}\b/g) || []).map(Number) : [];
   
-  const startMs = range.startDate.getTime() - (5 * 24 * 60 * 60 * 1000); // 5-day buffer before
-  const endMs = range.endDate.getTime() + (5 * 24 * 60 * 60 * 1000);     // 5-day buffer after
-  
-  return transactions.filter(t => {
-    if (!t.date) return false;
+  // If years found in period, filter transactions matching those years
+  if (yearsInPeriod.length > 0) {
+    const uniqueYears = [...new Set(yearsInPeriod)];
+    return transactions.filter(t => {
+      if (!t.date) return false;
+      const txDate = new Date(t.date);
+      const txYear = txDate.getFullYear();
+      if (isNaN(txYear)) return false;
+      return uniqueYears.includes(txYear);
+    });
+  }
+
+  // 3. Fallback: Find most common year among transactions
+  const yearCounts = {};
+  for (const t of transactions) {
+    if (!t.date) continue;
     const txDate = new Date(t.date);
-    const txMs = txDate.getTime();
-    if (isNaN(txMs)) return false;
-    return txMs >= startMs && txMs <= endMs;
-  });
+    const txYear = txDate.getFullYear();
+    if (isNaN(txYear)) continue;
+    yearCounts[txYear] = (yearCounts[txYear] || 0) + 1;
+  }
+
+  const years = Object.keys(yearCounts).map(Number);
+  if (years.length > 0) {
+    let mostCommonYear = years[0];
+    let maxCount = yearCounts[mostCommonYear];
+    for (const yr of years) {
+      if (yearCounts[yr] > maxCount) {
+        mostCommonYear = yr;
+        maxCount = yearCounts[yr];
+      }
+    }
+    return transactions.filter(t => {
+      if (!t.date) return false;
+      const txDate = new Date(t.date);
+      const txYear = txDate.getFullYear();
+      if (isNaN(txYear)) return false;
+      return txYear === mostCommonYear;
+    });
+  }
+
+  // Otherwise, just keep all transactions with valid dates
+  return transactions.filter(t => t.date && !isNaN(new Date(t.date).getTime()));
 }

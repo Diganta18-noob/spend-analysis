@@ -57,13 +57,18 @@ describe("dateFilter utility", () => {
       expect(result.map(t => t.desc)).toEqual(["Swiggy", "Zomato (buffer)", "Amazon (buffer)"]);
     });
 
-    it("should fallback to filtering only invalid dates when period is null or unparseable", () => {
+    it("should fallback to year-based filtering when period is a single date with a year", () => {
+      const result = filterTransactionsByPeriod(transactions, "June 12, 2026");
+      // Extracts 2026 from the period string and filters by year
+      expect(result.length).toBe(3);
+      expect(result.map(t => t.desc)).toEqual(["Swiggy", "Zomato (buffer)", "Amazon (buffer)"]);
+    });
+
+    it("should fallback to most common year when period is null or has no year", () => {
       const result = filterTransactionsByPeriod(transactions, null);
-      // Keeps all that have valid dates (excludes null, invalid-date)
-      expect(result.length).toBe(5);
-      expect(result.map(t => t.desc)).toEqual([
-        "Swiggy", "Zomato (buffer)", "Amazon (buffer)", "Sample illustration", "Late payment fee sample"
-      ]);
+      // Finds 2026 as the most common year among transactions (3 vs 1 vs 1) and filters by it
+      expect(result.length).toBe(3);
+      expect(result.map(t => t.desc)).toEqual(["Swiggy", "Zomato (buffer)", "Amazon (buffer)"]);
     });
   });
 });
