@@ -25,6 +25,7 @@ import { validateFileTypes } from "./middleware/fileTypeCheck.js";
 import { loginSchema, changePasswordSchema, updateAnalysisSchema } from "./schemas.js";
 import { initSentry, sentryErrorHandler, captureException } from "./lib/sentry.js";
 import { requireAdmin, requireUserAuth, optionalUserAuth } from "./middleware/auth.js";
+import { filterTransactionsByPeriod } from "./lib/dateFilter.js";
 
 const JWT_SECRET = process.env.JWT_SECRET || "default_jwt_secret_change_me_123";
 
@@ -52,10 +53,6 @@ function getClientIp(req) {
   return req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket?.remoteAddress || "unknown";
 }
 
-
-
-
-// --- PDF Processing Helper with Progress Callback & 4-concurrency ---
 export async function convertPdfToImages(fileBuffer, password, onPageConverted = null) {
   let doc = null;
   try {
@@ -305,6 +302,11 @@ app.post("/api/analyze", optionalUserAuth, upload.array("files", 10), validateFi
 
     const data = await analyzeStatementsServer(processedFiles);
 
+    // Filter transactions to exclude illustrative pages/samples outside statement period
+    if (data.transactions && data.period) {
+      data.transactions = filterTransactionsByPeriod(data.transactions, data.period);
+    }
+
     // Validate: if AI returned zero transactions, return an error instead of blank data
     if (!data.transactions || data.transactions.length === 0) {
       console.warn("[V1] Analysis returned 0 transactions — returning error to client");
@@ -522,6 +524,11 @@ app.post("/api/v2/analyze", optionalUserAuth, upload.array("files", 10), validat
       }
 
       sendSSE("page_extracted", { index: i + 1, total: totalImages, transactionsCount: pageResult.transactions?.length || 0 });
+    }
+
+    // Filter transactions to exclude illustrative pages/samples outside statement period
+    if (allTransactions.length > 0 && period) {
+      allTransactions = filterTransactionsByPeriod(allTransactions, period);
     }
 
     // Validate: if zero transactions were extracted across all pages, send error

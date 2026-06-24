@@ -16,6 +16,7 @@ STRICT ACCURACY RULES:
 6. If a number is unclear or partially visible, mark the transaction with "uncertain": true instead of guessing.
 7. Dates MUST be in YYYY-MM-DD format. If the year is ambiguous, infer from surrounding context but NEVER fabricate dates.
 8. Check for common OCR misreads: do not misread 29 as 23, 08 as 03, 6 as 8, 1 as 7, 5 as 3, etc.
+9. DO NOT extract illustrative examples, terms & conditions, interest/fee calculation tables, or sample transactions that are printed as explanations at the back of the statement. Only extract actual transactions charged to the account during the statement period.
 
 SELF-VERIFICATION (MANDATORY):
 Before producing the final output, perform this check:
@@ -143,6 +144,7 @@ STRICT RULES:
 10. For bank accounts: debit transactions may be in a debit/withdrawal column, or have "Dr", "Debit", "Withdrawal", or "-" signs.
 11. If a "STATEMENT SUMMARY" box is visible, extract "Total Credits" for the total_credits field.
 12. REWARD POINTS: If a reward points column is visible, extract points per transaction. Otherwise set reward_points to null.
+13. DO NOT extract illustrative examples, terms & conditions, interest/fee calculation tables, or sample transactions that are printed as explanations at the back of the statement. Only extract actual transactions charged to the account during the statement period.
 
 CATEGORY LIST: Rent, Insurance, Food & Dining, Office Food, Transport, Groceries, Bills & Subscriptions, Personal Transfer, Self Transfer, Entertainment, Shopping, Healthcare, Education, Other
 - "Self Transfer" is ONLY for transfers to the SAME person's own accounts. UPI/NEFT to other people = "Personal Transfer".
