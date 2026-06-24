@@ -271,12 +271,20 @@ export default function RewardsPanel({ transactions, totalRewardPoints }) {
             </thead>
             <tbody>
               {rewardStats.txnsWithPoints.map((t, i) => {
-                const d = new Date(t.date);
+                const formattedDate = (() => {
+                  try {
+                    const d = new Date(t.date);
+                    if (isNaN(d.getTime())) return t.date || "—";
+                    return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
+                  } catch {
+                    return t.date || "—";
+                  }
+                })();
                 const color = CAT_COLORS[t.cat] || "#666";
                 return (
                   <tr key={i} className="reward-txn-row">
                     <td style={{ padding: "9px 12px", color: "#475569", fontFamily: "DM Mono, monospace", fontSize: 11, whiteSpace: "nowrap", borderBottom: "1px solid var(--app-table-border)" }}>
-                      {d.toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
+                      {formattedDate}
                     </td>
                     <td style={{ padding: "9px 12px", color: "var(--app-text)", borderBottom: "1px solid var(--app-table-border)" }}>{t.desc}</td>
                     <td style={{ padding: "9px 12px", borderBottom: "1px solid var(--app-table-border)" }}>

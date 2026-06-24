@@ -40,7 +40,20 @@ export default function ExpenseManager({ data, onBack, backLabel, onUpdateTransa
   const [editingTxn, setEditingTxn] = useState(null); // index of txn being edited
   const [toastData, setToastData] = useState(null); // { realIndex, newCat, desc }
 
-  const TRANSACTIONS = data?.transactions || [];
+  const TRANSACTIONS = useMemo(() => {
+    return (data?.transactions || []).map(t => {
+      const rawDate = t?.date ? String(t.date) : "";
+      const date = rawDate.length >= 10 ? rawDate : "2026-06-01";
+      return {
+        ...t,
+        date,
+        desc: t?.desc ? String(t.desc) : "Unknown Merchant",
+        amount: Number(t?.amount) || 0,
+        cat: t?.cat ? String(t.cat) : "Other",
+        reward_points: t?.reward_points != null ? Number(t.reward_points) : null
+      };
+    });
+  }, [data]);
   const insights = data?.insights || [];
 
   const txns = useMemo(
@@ -66,7 +79,19 @@ export default function ExpenseManager({ data, onBack, backLabel, onUpdateTransa
   const dailyData = useMemo(() => {
     const map = {};
     txns.forEach(t => {
-      const d = parseInt(t.date.slice(8, 10));
+      let d = 1;
+      if (t.date) {
+        const parts = t.date.split(/[-/]/);
+        if (parts.length === 3) {
+          if (parts[0].length === 4) {
+            d = parseInt(parts[2], 10) || 1;
+          } else {
+            d = parseInt(parts[0], 10) || 1;
+          }
+        } else {
+          d = parseInt(t.date.slice(8, 10), 10) || 1;
+        }
+      }
       map[d] = (map[d] || 0) + t.amount;
     });
     const days = Object.keys(map).map(Number).sort((a, b) => a - b);
@@ -99,7 +124,7 @@ export default function ExpenseManager({ data, onBack, backLabel, onUpdateTransa
 
   const vendorMap = {};
   txns.forEach(t => {
-    const key = t.desc.split("(")[0].trim();
+    const key = (t.desc || "").split("(")[0].trim() || "Unknown Payee";
     if (!vendorMap[key]) vendorMap[key] = { count: 0, total: 0, cat: t.cat };
     vendorMap[key].count++;
     vendorMap[key].total += t.amount;
@@ -368,14 +393,22 @@ export default function ExpenseManager({ data, onBack, backLabel, onUpdateTransa
                 <tbody>
                   {filteredTxns.map((t, i) => {
                     const meta = CAT_META[t.cat] || { color: "#666", icon: "•" };
-                    const d = new Date(t.date);
+                    const formattedDate = (() => {
+                      try {
+                        const d = new Date(t.date);
+                        if (isNaN(d.getTime())) return t.date || "—";
+                        return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
+                      } catch {
+                        return t.date || "—";
+                      }
+                    })();
                     // Find the real index in TRANSACTIONS (not filtered)
                     const realIndex = TRANSACTIONS.indexOf(t);
                     const isEditing = editingTxn === realIndex;
                     return (
                       <tr key={i} className="tx-row">
                         <td style={{ padding: "9px 12px", color: "#475569", fontFamily: "DM Mono, monospace", fontSize: 11, whiteSpace: "nowrap", borderBottom: "1px solid #0d0d1a" }}>
-                          {d.toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
+                          {formattedDate}
                         </td>
                         <td style={{ padding: "9px 12px", color: "var(--app-text)", borderBottom: "1px solid var(--app-table-border)" }}>{t.desc}</td>
                         <td style={{ padding: "9px 12px", borderBottom: "1px solid var(--app-table-border)" }}>
