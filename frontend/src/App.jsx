@@ -92,7 +92,11 @@ function App() {
       setData(result);
       window.location.hash = "#/dashboard";
     } catch (err) {
-      setError(err.message || "Failed to analyze statements. Please try again.");
+      if (err.code === "PDF_PASSWORD_REQUIRED" || err.code === "PDF_PASSWORD_INCORRECT") {
+        setError(`${err.code}: ${err.message}`);
+      } else {
+        setError(err.message || "Failed to analyze statements. Please try again.");
+      }
     } finally {
       setIsLoading(false);
       setProgressMessage("");

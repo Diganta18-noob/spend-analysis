@@ -455,7 +455,9 @@ app.post("/api/v2/analyze", optionalUserAuth, upload.array("files", 10), validat
           const isRetry = !!password;
           sendSSE("error", { 
             code: isRetry ? "PDF_PASSWORD_INCORRECT" : "PDF_PASSWORD_REQUIRED", 
-            message: `Password required or incorrect for "${file.originalname}"`,
+            message: isRetry 
+              ? `Incorrect password for "${file.originalname}". Please try again.`
+              : `The file "${file.originalname}" is password-protected. Please provide the password.`,
             fileName: file.originalname,
             fileIndex: i
           });

@@ -119,7 +119,8 @@ export default function UploadScreen({ onAnalyze, onUseSample, isLoading, error,
     error.includes("password-protected") || 
     error.includes("PDF_PASSWORD_REQUIRED") ||
     error.includes("PDF_PASSWORD_INCORRECT") ||
-    error.includes("Incorrect password")
+    error.includes("Incorrect password") ||
+    error.includes("Password required or incorrect")
   );
 
   // Detect location restriction error
