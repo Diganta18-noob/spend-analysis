@@ -1,4 +1,13 @@
-const API_BASE = import.meta.env.VITE_API_URL || "/api";
+const getApiBase = () => {
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
+  }
+  if (typeof window !== "undefined" && window.location.hostname.includes("vercel.app")) {
+    return "https://spend-analysis-moqe.onrender.com/api";
+  }
+  return "/api";
+};
+const API_BASE = getApiBase();
 
 /**
  * Send bank statement images to the backend for analysis.

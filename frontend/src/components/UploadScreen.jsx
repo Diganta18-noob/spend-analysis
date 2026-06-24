@@ -12,7 +12,16 @@ export default function UploadScreen({ onAnalyze, onUseSample, isLoading, error,
   const pingServerFast = async () => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 1500); // 1.5s timeout
-    const API_BASE = import.meta.env.VITE_API_URL || "/api";
+    const getApiBase = () => {
+      if (import.meta.env.VITE_API_URL) {
+        return import.meta.env.VITE_API_URL;
+      }
+      if (typeof window !== "undefined" && window.location.hostname.includes("vercel.app")) {
+        return "https://spend-analysis-moqe.onrender.com/api";
+      }
+      return "/api";
+    };
+    const API_BASE = getApiBase();
     try {
       const res = await fetch(`${API_BASE}/ping`, { signal: controller.signal });
       clearTimeout(timeoutId);

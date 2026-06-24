@@ -1,5 +1,14 @@
 // Using relative path for local proxy, or environment variable for production
-const API_BASE = import.meta.env.VITE_API_URL || "/api";
+const getApiBase = () => {
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
+  }
+  if (typeof window !== "undefined" && window.location.hostname.includes("vercel.app")) {
+    return "https://spend-analysis-moqe.onrender.com/api";
+  }
+  return "/api";
+};
+const API_BASE = getApiBase();
 
 export async function adminLogin(password) {
   const res = await fetch(`${API_BASE}/admin/login`, {
