@@ -58,9 +58,11 @@ function App() {
   // Load cached analysis on mount
   useEffect(() => {
     const cached = loadAnalysis();
-    if (cached && (route === "#/" || route === "#/dashboard")) {
+    if (cached) {
       setData(cached);
-      window.location.hash = "#/dashboard";
+      if (route === "#/dashboard") {
+        window.location.hash = "#/dashboard";
+      }
     }
   }, []);
 
