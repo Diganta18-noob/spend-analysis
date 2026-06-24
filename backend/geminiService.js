@@ -445,11 +445,22 @@ export async function analyzeStatementsServer(files, prompt = AI_PROMPT) {
                           (modelError.message && modelError.message.toLowerCase().includes("took too long")) ||
                           (modelError.message && modelError.message.toLowerCase().includes("timeout"));
 
+        const isHighDemandOrOverloaded = modelError.status === 503 ||
+                                         (modelError.message && (
+                                           modelError.message.toLowerCase().includes("high demand") ||
+                                           modelError.message.toLowerCase().includes("overloaded") ||
+                                           modelError.message.toLowerCase().includes("capacity") ||
+                                           modelError.message.toLowerCase().includes("resource exhausted") ||
+                                           modelError.message.toLowerCase().includes("unavailable")
+                                         ));
+
         const isTemporaryError = modelError.isQuotaError || 
                                  (modelError.message && modelError.message.includes("Empty response")) || 
                                  modelError.isNotFoundError || 
                                  modelError.isLocationError || 
-                                 isTimeout;
+                                 isTimeout ||
+                                 isHighDemandOrOverloaded ||
+                                 (modelError.status >= 500);
 
         if (isTemporaryError && canFallback) {
           console.warn(`[Gemini] ⚠️ ${modelError.message} for ${usedModel} — falling back to ${MODEL_CHAIN[modelIdx + 1]}...`);
