@@ -316,6 +316,11 @@ app.post("/api/analyze", optionalUserAuth, upload.array("files", 10), validateFi
     }
 
     const id = uuidv4();
+    
+    // Ensure total_reward_points is aggregated correctly from transaction reward points
+    const computedTotalRewardPoints = (data.transactions || []).reduce((s, t) => s + (t.reward_points || 0), 0);
+    data.total_reward_points = data.total_reward_points || computedTotalRewardPoints;
+
     const totalSpent = (data.transactions || [])
       .filter(t => t.cat !== "Self Transfer")
       .reduce((s, t) => s + Number(t.amount || 0), 0);
@@ -554,6 +559,10 @@ app.post("/api/v2/analyze", optionalUserAuth, upload.array("files", 10), validat
 
     sendSSE("finalizing", { message: "Running PII redaction and generating global insights..." });
 
+    // Ensure total_reward_points is aggregated correctly from transaction reward points
+    const computedTotalRewardPoints = allTransactions.reduce((s, t) => s + (t.reward_points || 0), 0);
+    const finalRewardPoints = totalRewardPoints || computedTotalRewardPoints;
+
     // 3. PII Redaction
     const combinedData = {
       bank: bankName,
@@ -562,7 +571,7 @@ app.post("/api/v2/analyze", optionalUserAuth, upload.array("files", 10), validat
       opening_balance: openingBalance,
       closing_balance: closingBalance,
       total_credits: totalCredits,
-      total_reward_points: totalRewardPoints,
+      total_reward_points: finalRewardPoints,
       transactions: allTransactions,
       insights: []
     };

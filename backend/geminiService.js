@@ -32,7 +32,7 @@ STATEMENT TYPE DETECTION:
 - If the statement has a "STATEMENT SUMMARY" box, strictly extract the "Total Credits" / "Payments" / "Deposits" value for the 'total_credits' field, and use the "Purchases/Charges" or total debits for your own reference to ensure you don't over-extract.
 
 REWARD POINTS:
-- Many credit card statements have a "Reward Points" or "Points Earned" column next to each transaction. If you see such a column, extract the reward points for EACH transaction into the "reward_points" field (integer). Negative reward points (e.g., -104 for refunds) should be preserved as negative numbers. If no reward points column is visible, set "reward_points" to null for all transactions. Also compute "total_reward_points" as the sum of all extracted reward points.
+- Many credit card statements have a "Reward Points" or "Points Earned" column next to each transaction (which may appear without headers on subsequent page continuations). If you see such a column, extract the reward points for EACH transaction into the "reward_points" field (integer). Negative reward points (e.g., -104 for refunds) should be preserved as negative numbers. For page continuations where headers are missing, identify the reward points column based on its relative position to the amount column or from the values (typically small integers, or negative numbers for refunds). If no reward points column is visible or exists, set "reward_points" to null for all transactions. Also compute "total_reward_points" as the sum of all extracted reward points.
 
 DEDUPLICATION & PAGE BOUNDARIES:
 - If multiple transactions have the same amount and description but occur on DIFFERENT dates or have DIFFERENT reference numbers, they are DISTINCT transactions — extract ALL of them.
@@ -143,7 +143,7 @@ STRICT RULES:
 9. For credit card statements: merchant refunds (ending in CR/Cr) should be extracted as NEGATIVE amounts. Exclude card bill payments ("Payment received", "Mobile Banking Payment", etc.).
 10. For bank accounts: debit transactions may be in a debit/withdrawal column, or have "Dr", "Debit", "Withdrawal", or "-" signs.
 11. If a "STATEMENT SUMMARY" box is visible, extract "Total Credits" for the total_credits field.
-12. REWARD POINTS: If a reward points column is visible, extract points per transaction. Otherwise set reward_points to null.
+12. REWARD POINTS: Look for a column containing reward points (often labeled 'Reward Points' or 'Points Earned' on page 1, but may appear without headers on subsequent pages). If you see a column of integers next to the amounts representing points earned/reversed, extract them for each transaction into the 'reward_points' field (preserving negative numbers for refunds). If no such column exists, set it to null. For page continuations where headers are missing, identify the reward points column based on its relative position to the amount column or from the values (typically small integers, or negative numbers for refunds).
 13. DO NOT extract illustrative examples, terms & conditions, interest/fee calculation tables, or sample transactions that are printed as explanations at the back of the statement. Only extract actual transactions charged to the account during the statement period.
 
 CATEGORY LIST: Rent, Insurance, Food & Dining, Office Food, Transport, Groceries, Bills & Subscriptions, Personal Transfer, Self Transfer, Entertainment, Shopping, Healthcare, Education, Other
