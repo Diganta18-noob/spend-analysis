@@ -152,7 +152,6 @@ export default function ExpenseManager({ data, onBack, backLabel, onUpdateTransa
   return (
     <div style={styles.root}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap');
         * { box-sizing: border-box; }
         body { background: var(--app-bg); transition: background-color 0.3s ease; }
         ::-webkit-scrollbar { width: 4px; height: 4px; }

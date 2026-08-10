@@ -171,7 +171,6 @@ export default function UploadScreen({ onAnalyze, onUseSample, isLoading, error,
       )}
 
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { background: var(--app-bg); transition: background-color 0.3s ease; }
         @keyframes pulse-glow {
