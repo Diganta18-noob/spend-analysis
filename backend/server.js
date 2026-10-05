@@ -19,17 +19,22 @@ import {
   findAdmin, updateAdminAttempts, resetAdminAttempts, updateAdminPassword,
   getUserAnalyses, getUserStats
 } from "./db.js";
+import { getAccessibleAnalysis, updateAccessibleAnalysis, listAnalyses, listAuditLogs, analysisExportCursor } from './db.js';
+import { requireAnalysisAccess } from './middleware/analysisAccess.js';
+import { getJwtSecret } from './config.js';
+import { normalizeExtractedTransactions, summarizeMoney, reconcileAnalysis, buildInsightInput } from './lib/analysisQuality.js';
+import { serializeCsv } from './lib/csv.js';
 import { helmetMiddleware, createCorsMiddleware, adminRateLimit, loginRateLimit } from "./middleware/security.js";
 import { validate } from "./middleware/validate.js";
 import { validateFileTypes } from "./middleware/fileTypeCheck.js";
-import { loginSchema, changePasswordSchema, updateAnalysisSchema } from "./schemas.js";
+import { loginSchema, changePasswordSchema, updateAnalysisSchema, analysisListSchema, auditListSchema } from "./schemas.js";
 import { initSentry, sentryErrorHandler, captureException } from "./lib/sentry.js";
 import { requireAdmin, requireUserAuth, optionalUserAuth } from "./middleware/auth.js";
 import { filterTransactionsByPeriod } from "./lib/dateFilter.js";
 
-const JWT_SECRET = process.env.JWT_SECRET || "default_jwt_secret_change_me_123";
-
 dotenv.config();
+
+const JWT_SECRET = getJwtSecret();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -224,8 +229,8 @@ app.post("/api/admin/change-password", requireAdmin, validate(changePasswordSche
       return res.status(401).json({ error: "Incorrect current password" });
     }
 
-    if (!newPassword || newPassword.length < 4) {
-      return res.status(400).json({ error: "New password must be at least 4 characters" });
+    if (!newPassword || newPassword.length < 12) {
+      return res.status(400).json({ error: "New password must be at least 12 characters" });
     }
 
     const newHash = await bcrypt.hash(newPassword, 10);
@@ -328,7 +333,7 @@ app.post("/api/analyze", optionalUserAuth, upload.array("files", 10), validateFi
     // Redact PII before saving to database
     const redactedData = redactPII(data);
 
-    await insertAnalysis({
+    if (req.user) await insertAnalysis({
       id,
       period: data.period,
       bank: data.bank,
@@ -340,14 +345,13 @@ app.post("/api/analyze", optionalUserAuth, upload.array("files", 10), validateFi
       owner_id: req.user ? req.user.id : null,
     });
 
-    await insertAuditLog({
+    if (req.user) await insertAuditLog({
       action: "ANALYSIS_CREATED",
       details: `Analyzed ${req.files.length} file(s). Bank: ${data.bank || "Unknown"}. Period: ${data.period || "Unknown"}. Transactions: ${(data.transactions || []).length}.`,
       ip,
     });
 
-    // Return FULL (unredacted) data to the current user session
-    res.json({ id, ...data });
+    res.json({ ...redactedData, id: req.user ? id : null, session_only: !req.user });
   } catch (error) {
     console.error("Analysis error:", error);
     try {
@@ -366,7 +370,9 @@ app.post("/api/analyze", optionalUserAuth, upload.array("files", 10), validateFi
 // Get all analyses (Admin)
 app.get("/api/analyses", requireAdmin, async (req, res) => {
   try {
-    const analyses = await getAllAnalyses();
+    const parsed = analysisListSchema.safeParse(req.query);
+    if (!parsed.success) return res.status(400).json({ error: 'Invalid filters', details: parsed.error.issues });
+    const analyses = await listAnalyses(parsed.data);
     res.json(analyses);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -384,10 +390,10 @@ app.get("/api/stats", requireAdmin, async (req, res) => {
 });
 
 // Get single analysis
-app.get("/api/analyses/:id", async (req, res) => {
+app.get("/api/analyses/:id", requireAnalysisAccess, async (req, res) => {
   const ip = getClientIp(req);
   try {
-    const analysis = await getAnalysisById(req.params.id);
+    const analysis = await getAccessibleAnalysis(req.params.id, req.analysisAccess);
     if (!analysis) {
       return res.status(404).json({ error: "Analysis not found" });
     }
@@ -403,12 +409,12 @@ app.get("/api/analyses/:id", async (req, res) => {
 });
 
 // Update analysis (e.g., category edits)
-app.put("/api/analyses/:id", validate(updateAnalysisSchema), async (req, res) => {
+app.put("/api/analyses/:id", requireAnalysisAccess, validate(updateAnalysisSchema), async (req, res) => {
   const ip = getClientIp(req);
   try {
     const { id } = req.params;
-    const data = req.body;
-    await updateAnalysis(id, data);
+    const updated = await updateAccessibleAnalysis(id, req.body.edits, req.analysisAccess);
+    if (!updated) return res.status(404).json({ error: 'Analysis not found' });
     await insertAuditLog({
       action: "ANALYSIS_UPDATED",
       details: `Updated analysis ${id}`,
@@ -416,14 +422,23 @@ app.put("/api/analyses/:id", validate(updateAnalysisSchema), async (req, res) =>
     });
     res.json({ success: true });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(error.status || 500).json({ error: error.status ? error.message : 'Unable to update analysis' });
   }
 });
 
 // Get health status (Cron / Keep-alive)
-app.get("/health", (req, res) => {
-  res.json({ status: "ok", uptime: process.uptime() });
-});
+const getHealthStatus = (req, res) => {
+  res.status(200).json({
+    status: "ok",
+    message: "Server is healthy and running",
+    timestamp: new Date().toISOString(),
+    uptime: Math.floor(process.uptime())
+  });
+};
+
+app.get("/health", getHealthStatus);
+app.get("/api/health", getHealthStatus);
+
 
 // Stream analysis progress via Server-Sent Events (SSE)
 app.post("/api/v2/analyze", optionalUserAuth, upload.array("files", 10), validateFileTypes, async (req, res) => {
@@ -494,12 +509,15 @@ app.post("/api/v2/analyze", optionalUserAuth, upload.array("files", 10), validat
     const totalImages = imageFiles.length;
     let allTransactions = [];
     let bankName = null;
+    let statementType = null;
     let period = null;
     let accountHolder = null;
     let openingBalance = null;
     let closingBalance = null;
-    let totalCredits = 0;
-    let totalRewardPoints = 0;
+    let totalCredits = null;
+    let totalRewardPoints = null;
+    const extractionWarnings = [];
+    if (req.files.length > 1) extractionWarnings.push('Multiple files combined: reconciliation is unavailable; review individual statements and periods.');
 
     // 2. Page-by-page transaction extraction
     for (let i = 0; i < totalImages; i++) {
@@ -508,10 +526,18 @@ app.post("/api/v2/analyze", optionalUserAuth, upload.array("files", 10), validat
       // We run extractTransactions using analyzeStatementsServer with PAGE_EXTRACTION_PROMPT
       const pageResult = await analyzeStatementsServer([imgFile], PAGE_EXTRACTION_PROMPT);
       
-      if (pageResult.transactions) {
-        allTransactions.push(...pageResult.transactions);
-      }
+      const normalized = normalizeExtractedTransactions(pageResult.transactions, { page: i + 1 });
+      extractionWarnings.push(...normalized.warnings);
+      // Only deduplicate explicit reference-matched rows at adjacent page boundaries.
+      const previous = allTransactions.at(-1);
+      const first = normalized.transactions[0];
+      if (req.files.length === 1 && previous && first && previous.reference && first.reference === previous.reference && first.date === previous.date && first.amount === previous.amount && first.desc === previous.desc) normalized.transactions.shift();
+      allTransactions.push(...normalized.transactions);
       if (pageResult.bank && !bankName) bankName = pageResult.bank;
+      if (pageResult.statement_type === 'bank_account' || pageResult.statement_type === 'credit_card') {
+        if (statementType && statementType !== pageResult.statement_type) extractionWarnings.push('Mixed statement types: reconciliation requires review');
+        statementType = statementType === 'credit_card' ? statementType : pageResult.statement_type;
+      }
       if (pageResult.period && !period) period = pageResult.period;
       if (pageResult.account_holder && !accountHolder) accountHolder = pageResult.account_holder;
       
@@ -521,18 +547,18 @@ app.post("/api/v2/analyze", optionalUserAuth, upload.array("files", 10), validat
       if (pageResult.closing_balance !== undefined && pageResult.closing_balance !== null) {
         closingBalance = pageResult.closing_balance;
       }
-      if (pageResult.total_credits) {
-        totalCredits += pageResult.total_credits;
+      if (typeof pageResult.total_credits === 'number' && Number.isFinite(pageResult.total_credits)) {
+        totalCredits = totalCredits == null ? pageResult.total_credits : Math.max(totalCredits, pageResult.total_credits);
       }
-      if (pageResult.total_reward_points) {
-        totalRewardPoints += pageResult.total_reward_points;
+      if (pageResult.reward_total_scope === 'statement' && typeof pageResult.total_reward_points === 'number' && Number.isFinite(pageResult.total_reward_points)) {
+        totalRewardPoints = pageResult.total_reward_points;
       }
 
       sendSSE("page_extracted", { index: i + 1, total: totalImages, transactionsCount: pageResult.transactions?.length || 0 });
     }
 
     // Filter transactions to exclude illustrative pages/samples outside statement period
-    if (allTransactions.length > 0 && period) {
+    if (allTransactions.length > 0 && period && req.files.length === 1) {
       allTransactions = filterTransactionsByPeriod(allTransactions, period);
     }
 
@@ -545,26 +571,15 @@ app.post("/api/v2/analyze", optionalUserAuth, upload.array("files", 10), validat
       return res.end();
     }
 
-    // Self-verification: log balance equation check
-    if (openingBalance != null && closingBalance != null) {
-      const totalDebits = allTransactions.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
-      const totalRefunds = allTransactions.filter(t => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0);
-      const expectedClosing = openingBalance + totalCredits - totalDebits + totalRefunds;
-      const balanceDiff = Math.abs(expectedClosing - closingBalance);
-      console.log(`[V2] Balance verification: Opening(${openingBalance}) + Credits(${totalCredits}) - Debits(${totalDebits}) + Refunds(${totalRefunds}) = ${expectedClosing} | Actual Closing: ${closingBalance} | Diff: ${balanceDiff.toFixed(2)}`);
-      if (balanceDiff > 1) {
-        console.warn(`[V2] ⚠️ Balance mismatch of ₹${balanceDiff.toFixed(2)} — possible missing or incorrect transaction`);
-      }
-    }
-
     sendSSE("finalizing", { message: "Running PII redaction and generating global insights..." });
 
     // Ensure total_reward_points is aggregated correctly from transaction reward points
-    const computedTotalRewardPoints = allTransactions.reduce((s, t) => s + (t.reward_points || 0), 0);
-    const finalRewardPoints = totalRewardPoints || computedTotalRewardPoints;
+    const rewardRows = allTransactions.filter(t => typeof t.reward_points === 'number' && Number.isFinite(t.reward_points));
+    const finalRewardPoints = rewardRows.length ? rewardRows.reduce((sum, t) => sum + t.reward_points, 0) : totalRewardPoints;
 
     // 3. PII Redaction
     const combinedData = {
+      statement_type: req.files.length === 1 ? statementType : null,
       bank: bankName,
       period: period,
       account_holder: accountHolder,
@@ -577,19 +592,23 @@ app.post("/api/v2/analyze", optionalUserAuth, upload.array("files", 10), validat
     };
 
     const redactedData = redactPII(combinedData);
+    redactedData.quality = { warnings: extractionWarnings, reconciliation: reconcileAnalysis(combinedData) };
 
     // 4. Generate global insights from JSON
-    const insightsPrompt = GLOBAL_INSIGHTS_PROMPT + JSON.stringify(redactedData.transactions.slice(0, 150)); // Slice to avoid exceeding LLM input limits
-    const insightsResult = await analyzeStatementsServer([], insightsPrompt);
-    redactedData.insights = insightsResult.insights || [];
+    const insightsPrompt = GLOBAL_INSIGHTS_PROMPT + '\nInput summaries use integer paise and cover every transaction.\n' + JSON.stringify(buildInsightInput(redactedData.transactions));
+    try {
+      const insightsResult = await analyzeStatementsServer([], insightsPrompt);
+      redactedData.insights = insightsResult.insights || [];
+    } catch {
+      redactedData.insights = [];
+      redactedData.quality.warnings.push('Insights are unavailable. Extracted transactions are still available.');
+    }
 
     // 5. Store in database
     const id = uuidv4();
-    const totalSpent = (redactedData.transactions || [])
-      .filter(t => t.cat !== "Self Transfer")
-      .reduce((s, t) => s + t.amount, 0);
+    const totalSpent = summarizeMoney(redactedData.transactions).netSpend / 100;
 
-    await insertAnalysis({
+    if (req.user) await insertAnalysis({
       id,
       period: redactedData.period,
       bank: redactedData.bank,
@@ -601,13 +620,13 @@ app.post("/api/v2/analyze", optionalUserAuth, upload.array("files", 10), validat
       owner_id: req.user ? req.user.id : null,
     });
 
-    await insertAuditLog({
+    if (req.user) await insertAuditLog({
       action: "ANALYSIS_CREATED",
       details: `Analyzed ${req.files.length} file(s). Bank: ${bankName || "Unknown"}. Period: ${period || "Unknown"}. Transactions: ${allTransactions.length}.`,
       ip,
     });
 
-    sendSSE("done", { id, ...redactedData });
+    sendSSE("done", { ...redactedData, id: req.user ? id : null, session_only: !req.user });
     res.end();
   } catch (error) {
     console.error("v2 analysis error:", error);
@@ -639,14 +658,10 @@ app.get("/api/v2/me/stats", requireUserAuth, async (req, res) => {
 // Delete logged-in user's own analysis
 app.delete("/api/v2/me/analyses/:id", requireUserAuth, async (req, res) => {
   try {
-    const analysis = await getAnalysisById(req.params.id);
-    if (!analysis) {
+    const result = await deleteAnalysis(req.params.id, req.user.id);
+    if (!result.deletedCount) {
       return res.status(404).json({ error: "Analysis not found" });
     }
-    if (analysis.owner_id !== req.user.id) {
-      return res.status(403).json({ error: "Unauthorized to delete this analysis" });
-    }
-    await deleteAnalysis(req.params.id);
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -682,9 +697,9 @@ app.delete("/api/analyses/:id", requireAdmin, async (req, res) => {
 // --- Admin: Audit Logs ---
 app.get("/api/admin/audit-logs", adminRateLimit, requireAdmin, async (req, res) => {
   try {
-    const limit = parseInt(req.query.limit) || 50;
-    const offset = parseInt(req.query.offset) || 0;
-    const data = await getAuditLogs(limit, offset);
+    const parsed = auditListSchema.safeParse(req.query);
+    if (!parsed.success) return res.status(400).json({ error: 'Invalid filters' });
+    const data = await listAuditLogs(parsed.data);
     res.json(data);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -709,10 +724,39 @@ app.post("/api/admin/log-export", adminRateLimit, requireAdmin, async (req, res)
   res.json({ success: true });
 });
 
+app.get('/api/admin/export', adminRateLimit, requireAdmin, async (req, res) => {
+  const parsed = analysisListSchema.safeParse(req.query);
+  if (!parsed.success) return res.status(400).json({ error: 'Invalid filters' });
+  const cursor = analysisExportCursor(parsed.data);
+  let count = 0;
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="spend-analyses.csv"');
+  res.setHeader('Cache-Control', 'no-store');
+  const write = chunk => new Promise((resolve, reject) => {
+    if (res.destroyed) return reject(new Error('Download disconnected'));
+    if (res.write(chunk)) return resolve();
+    const finish = () => { cleanup(); resolve(); };
+    const fail = () => { cleanup(); reject(new Error('Download disconnected')); };
+    const cleanup = () => { res.off('drain', finish); res.off('close', fail); res.off('error', fail); };
+    res.once('drain', finish); res.once('close', fail); res.once('error', fail);
+  });
+  try {
+    await write('\uFEFF' + serializeCsv(['ID', 'Created', 'Period', 'Bank', 'Account Holder', 'Transactions', 'Net Spend'], []) + '\r\n');
+    for await (const row of cursor) {
+      await write(serializeCsv([], [[row.id, row.created_at?.toISOString(), row.period, row.bank, row.account_holder, row.transaction_count, row.total_spent]]).replace(/^\r\n/, '') + '\r\n');
+      count++;
+    }
+    await insertAuditLog({ action: 'CSV_EXPORTED', details: `Exported ${count} matching analyses`, ip: getClientIp(req) });
+    res.end();
+  } catch { res.destroy(); }
+  finally { await cursor.close(); }
+});
+
 // --- Sentry error handler (must be after routes) ---
 app.use(sentryErrorHandler());
 
-initDb().then(async () => {
+export { app };
+if (process.env.NODE_ENV !== 'test') initDb().then(async () => {
   await initSentry(app);
   app.listen(port, "0.0.0.0", () => {
     console.log(`Backend server running on port ${port}`);

@@ -1,219 +1,73 @@
-import { useState, useCallback, useEffect } from "react";
-import UploadScreen from "./components/UploadScreen";
-import ExpenseManager from "./components/ExpenseManager";
-import AdminLogin from "./components/admin/AdminLogin";
-import AdminDashboard from "./components/admin/AdminDashboard";
-import Navbar from "./components/Navbar";
-import HistoryScreen from "./components/HistoryScreen";
-import { useAuth } from "./components/auth/AuthProvider";
-import { analyzeStatementsV2 } from "./services/geminiService";
-import { SAMPLE_DATA } from "./data/sampleData";
-import { saveAnalysis, loadAnalysis, clearAnalysis } from "./services/cacheService";
-import { updateAnalysis } from "./services/apiService";
-
-function App() {
-  const { getToken } = useAuth();
-  const [route, setRoute] = useState(window.location.hash || "#/");
+import { useEffect, useRef, useState, lazy, Suspense } from 'react';
+import { SignInButton, UserButton } from '@clerk/clerk-react';
+import UploadScreen from './components/UploadScreen';
+import HistoryScreen from './components/HistoryScreen';
+import PortalShell from './components/layout/PortalShell';
+import { Button, Skeleton } from './components/ui/PortalUI';
+import { useAuth } from './components/auth/AuthProvider';
+import { analyzeStatementsV2 } from './services/geminiService';
+import { clearAnalysis } from './services/cacheService';
+import { useAnalysisPersistence } from './hooks/useAnalysisPersistence';
+import { SAMPLE_DATA } from './data/sampleData';
+import './portal.css';
+const AdminLogin = lazy(() => import('./components/admin/AdminLogin'));
+const ExpenseManager = lazy(() => import('./components/ExpenseManager'));
+const AdminDashboard = lazy(() => import('./components/admin/AdminDashboard'));
+const views = ['overview', 'transactions', 'vendors', 'insights', 'rewards'];
+export default function App() {
+  const { userId } = useAuth();
+  // Remount financial state on sign-out or account switch so another user cannot see it.
+  return <WorkspaceApp key={userId || 'anonymous'} />;
+}
+function WorkspaceApp() {
+  const analysisRequest = useRef(null);
+  useEffect(() => () => analysisRequest.current?.abort(), []);
+  const [route, setRoute] = useState(window.location.hash || '#/');
   const [data, setData] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [progressMessage, setProgressMessage] = useState("");
-  const [error, setError] = useState(null);
-  const [theme, setTheme] = useState(localStorage.getItem("theme") || "dark");
-
-  // Sync theme with document class and localStorage
+  const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark');
+  const [loading, setLoading] = useState(false); const [progress, setProgress] = useState(''); const [error, setError] = useState('');
+  const { getToken, isClerkEnabled, isSignedIn } = useAuth();
+  const persistence = useAnalysisPersistence({ analysis: data, onChange: setData, getToken });
+  useEffect(() => { clearAnalysis(); }, []);
+  useEffect(() => { localStorage.setItem('theme', theme); document.documentElement.classList.toggle('light-mode', theme === 'light'); }, [theme]);
   useEffect(() => {
-    localStorage.setItem("theme", theme);
-    if (theme === "light") {
-      document.documentElement.classList.add("light-mode");
-    } else {
-      document.documentElement.classList.remove("light-mode");
-    }
-  }, [theme]);
-
-  const toggleTheme = useCallback(() => {
-    setTheme(prev => prev === "dark" ? "light" : "dark");
-  }, []);
-
-  // Handle hash changes for simple routing
-  useEffect(() => {
-    const onHashChange = () => {
-      const newRoute = window.location.hash || "#/";
-      setRoute(newRoute);
-      
-      // Auto-logout admin if they navigate away from admin pages (like hitting back button)
-      if (!newRoute.startsWith("#/admin")) {
-        sessionStorage.removeItem("admin_token");
-      }
+    const changed = () => {
+      const next = window.location.hash || '#/';
+      setRoute(next);
+      // Preserve existing behavior: clear only on explicit navigation away.
+      if (!next.startsWith('#/admin')) sessionStorage.removeItem('admin_token');
     };
-    
-    // Also clear it initially if they land on a non-admin page
-    if (!(window.location.hash || "#/").startsWith("#/admin")) {
-      sessionStorage.removeItem("admin_token");
-    }
-
-    window.addEventListener("hashchange", onHashChange);
-    return () => window.removeEventListener("hashchange", onHashChange);
+    window.addEventListener('hashchange', changed); return () => window.removeEventListener('hashchange', changed);
   }, []);
-
-  // Clear cached analysis on mount to start fresh on reload
-  useEffect(() => {
-    clearAnalysis();
-    setData(null);
-    if (window.location.hash === "#/dashboard") {
-      window.location.hash = "#/";
-    }
-  }, []);
-
-  // Sync state to cache and backend whenever data changes
-  useEffect(() => {
-    if (data) {
-      saveAnalysis(data);
-      if (data.id && data.id !== "sample") {
-        updateAnalysis(data.id, data).catch(err => console.error("Failed to sync analysis to server:", err));
-      }
-    }
-  }, [data]);
-
-  const handleAnalyze = useCallback(async (files, pdfPasswords = {}) => {
-    setError(null);
-    setIsLoading(true);
-    setProgressMessage("Starting analysis...");
+  const navigate = view => { window.location.hash = view === 'upload' ? '#/' : view === 'history' ? '#/history' : `#/dashboard/${view}`; };
+  async function analyze(files, passwords) {
+    analysisRequest.current?.abort();
+    const controller = new AbortController();
+    analysisRequest.current = controller;
+    setError(''); setLoading(true); setProgress('Preparing your statement…');
     try {
       const token = await getToken();
-      const result = await analyzeStatementsV2(files, pdfPasswords, ({ event, data }) => {
-        if (event === "page_converted") {
-          setProgressMessage(`Converting ${data.file || "PDF"}: page ${data.page} of ${data.total}...`);
-        } else if (event === "page_extracted") {
-          setProgressMessage(`Extracting transactions: page ${data.index} of ${data.total} (${data.transactionsCount} found)...`);
-        } else if (event === "finalizing") {
-          setProgressMessage(data.message || "Redacting PII and generating insights...");
-        }
-      }, token);
-      setData(result);
-      window.location.hash = "#/dashboard";
-    } catch (err) {
-      if (err.code === "PDF_PASSWORD_REQUIRED" || err.code === "PDF_PASSWORD_INCORRECT") {
-        setError(`${err.code}: ${err.message}`);
-      } else {
-        setError(err.message || "Failed to analyze statements. Please try again.");
-      }
-    } finally {
-      setIsLoading(false);
-      setProgressMessage("");
-    }
-  }, [getToken]);
-
-  const handleUseSample = useCallback(() => {
-    setData({ id: "sample", ...SAMPLE_DATA });
-    window.location.hash = "#/dashboard";
-  }, []);
-
-  const handleBack = useCallback(() => {
-    clearAnalysis();
-    setData(null);
-    setError(null);
-    window.location.hash = "#/";
-  }, []);
-
-  const handleUpdateTransaction = useCallback((txnIndex, field, value) => {
-    setData(prev => {
-      if (!prev) return prev;
-      const updated = { ...prev };
-      updated.transactions = [...prev.transactions];
-      updated.transactions[txnIndex] = { ...updated.transactions[txnIndex], [field]: value };
-      return updated;
-    });
-  }, []);
-
-  const handleBatchUpdateCategory = useCallback((desc, newCat) => {
-    setData(prev => {
-      if (!prev) return prev;
-      const updated = { ...prev };
-      updated.transactions = prev.transactions.map(t => 
-        t.desc === desc ? { ...t, cat: newCat } : t
-      );
-      return updated;
-    });
-  }, []);
-
-  const handleNavigate = useCallback((newHash) => {
-    window.location.hash = newHash;
-  }, []);
-
-  const handleSelectAnalysis = useCallback((selectedData) => {
-    setData(selectedData);
-    window.location.hash = "#/dashboard";
-  }, []);
-
-  // ROUTING
-  if (route.startsWith("#/admin")) {
-    const hasToken = !!sessionStorage.getItem("admin_token");
-    
-    // Not logged in -> force to login page
-    if (!hasToken && route !== "#/admin/login") {
-      window.location.hash = "#/admin/login";
-      return null;
-    }
-    
-    // Already logged in but trying to access login page -> force to dashboard
-    if (hasToken && route === "#/admin/login") {
-      window.location.hash = "#/admin/dashboard";
-      return null;
-    }
-    
-    if (route === "#/admin/login") {
-      return <AdminLogin />;
-    }
-    
-    return <AdminDashboard />;
+      if (controller.signal.aborted) return;
+      if (isSignedIn && !token) throw new Error('Sign in again before analyzing to save your history.');
+      const result = await analyzeStatementsV2(files, passwords, ({ event, data: update }) => {
+        if (event === 'page_converted') setProgress(`Converting ${update.file}: page ${update.page} of ${update.total}`);
+        if (event === 'page_extracted') setProgress(`Extracting page ${update.index} of ${update.total} · ${update.transactionsCount} transactions found`);
+        if (event === 'finalizing') setProgress(update.message || 'Checking quality and generating insights…');
+      }, token, controller.signal);
+      if (controller.signal.aborted) return;
+      setData(result); navigate('overview');
+    } catch (failure) { if (!controller.signal.aborted) setError(`${failure.code ? failure.code + ': ' : ''}${failure.message}`); }
+    finally { if (analysisRequest.current === controller && !controller.signal.aborted) { setLoading(false); setProgress(''); } }
   }
-
-  let body = null;
-  if (route === "#/history") {
-    body = (
-      <HistoryScreen
-        onSelectAnalysis={handleSelectAnalysis}
-        onBack={() => handleNavigate("#/")}
-        theme={theme}
-      />
-    );
-  } else if (route === "#/dashboard" && data) {
-    body = (
-      <ExpenseManager 
-        data={data} 
-        onBack={handleBack} 
-        onUpdateTransaction={handleUpdateTransaction} 
-        onBatchUpdateCategory={handleBatchUpdateCategory}
-        theme={theme}
-      />
-    );
-  } else {
-    body = (
-      <UploadScreen
-        onAnalyze={handleAnalyze}
-        onUseSample={handleUseSample}
-        isLoading={isLoading}
-        progressMessage={progressMessage}
-        error={error}
-        theme={theme}
-      />
-    );
+  const toggleTheme = () => setTheme(value => value === 'dark' ? 'light' : 'dark');
+  if (route.startsWith('#/admin')) {
+    const hasToken = !!sessionStorage.getItem('admin_token');
+    return <Suspense fallback={<Skeleton label="Opening administration…" />}>{hasToken ? <AdminDashboard theme={theme} toggleTheme={toggleTheme} /> : <AdminLogin theme={theme} toggleTheme={toggleTheme} />}</Suspense>;
   }
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
-      <Navbar
-        currentRoute={route}
-        onNavigate={handleNavigate}
-        hasData={!!data}
-        theme={theme}
-        toggleTheme={toggleTheme}
-      />
-      <div style={{ flex: 1 }}>
-        {body}
-      </div>
-    </div>
-  );
+  const requested = route === '#/dashboard' ? 'overview' : route.split('/')[2];
+  const active = route === '#/history' ? 'history' : route.startsWith('#/dashboard') && data ? views.includes(requested) ? requested : 'overview' : 'upload';
+  const account = isClerkEnabled ? isSignedIn ? <UserButton /> : <SignInButton mode="modal"><Button>Sign in</Button></SignInButton> : null;
+  return <PortalShell activeView={active} onNavigate={navigate} theme={theme} onToggleTheme={toggleTheme} actions={account} hasData={!!data}><Suspense fallback={<Skeleton label="Opening analysis…" />}>
+    {active === 'upload' ? <UploadScreen onAnalyze={analyze} onUseSample={() => { setData({ ...SAMPLE_DATA, id: 'sample' }); navigate('overview'); }} isLoading={loading} progressMessage={progress} error={error} /> : active === 'history' ? <HistoryScreen onSelectAnalysis={selected => { setData(selected); navigate('overview'); }} onBack={() => navigate('upload')} /> : <ExpenseManager key={data.id || 'session'} data={persistence.analysis} persistence={persistence} view={active} onNavigate={navigate} onBack={() => navigate('upload')} />}
+  </Suspense></PortalShell>;
 }
-
-export default App;

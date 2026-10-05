@@ -45,4 +45,4 @@ No deployment was performed. Follow-up queueing/cancellation at provider boundar
 
 ## Working tree preservation
 
-Product changes are available in this workspace. `frontend/src/App.jsx` and `backend/server.js` integrate pre-existing user edits; they remain uncommitted so those original edits are not swept into an implementation commit. Other verified task-owned paths may be committed separately. The complete runnable result includes these working-tree files.
+The implementation initially left `frontend/src/App.jsx` and `backend/server.js` uncommitted to preserve pre-existing user edits separately. The user subsequently requested pushing the complete result to main; both integrated files are included in the integration commit with those original changes preserved. The complete result is committed rather than depending on working-tree changes.
