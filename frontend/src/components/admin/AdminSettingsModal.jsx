@@ -1,117 +1,87 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { adminChangePassword } from "../../services/apiService";
-import { Settings, Lock, X, Save } from "lucide-react";
-
+import { ConfirmDialog, InlineError } from "../ui/PortalUI";
 export default function AdminSettingsModal({ onClose }) {
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [success, setSuccess] = useState(null);
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError(null);
-    setSuccess(null);
-
-    if (newPassword !== confirmPassword) {
-      setError("New passwords do not match");
+  const [current, setCurrent] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmation, setConfirmation] = useState("");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+  const [saved, setSaved] = useState(false);
+  async function save() {
+    if (password.length < 12) {
+      setError("Use at least 12 characters for the new password.");
       return;
     }
-
-    if (newPassword.length < 4) {
-      setError("Password must be at least 4 characters long");
+    if (password !== confirmation) {
+      setError("New passwords do not match.");
       return;
     }
-
-    setLoading(true);
+    setPending(true);
+    setError("");
     try {
-      const res = await adminChangePassword(currentPassword, newPassword);
-      sessionStorage.setItem("admin_token", res.token);
-      setSuccess("Password changed successfully!");
-      setCurrentPassword("");
-      setNewPassword("");
-      setConfirmPassword("");
-    } catch (err) {
-      setError(err.message);
+      const data = await adminChangePassword(current, password);
+      if (data.token) sessionStorage.setItem("admin_token", data.token);
+      setSaved(true);
+      setCurrent("");
+      setPassword("");
+      setConfirmation("");
+    } catch (failure) {
+      setError(failure.message);
     } finally {
-      setLoading(false);
+      setPending(false);
     }
-  };
-
+  }
   return (
-    <div style={{
-      position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
-      background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)",
-      display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100
-    }}>
-      <div style={{
-        background: "#0f172a", border: "1px solid rgba(255,255,255,0.1)",
-        borderRadius: "16px", width: "100%", maxWidth: "450px", overflow: "hidden",
-        boxShadow: "0 25px 50px -12px rgba(0,0,0,0.5)",
-        fontFamily: "'Inter', sans-serif"
-      }}>
-        <div style={{ padding: "20px", borderBottom: "1px solid rgba(255,255,255,0.05)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <div style={{ background: "rgba(255,255,255,0.1)", padding: "8px", borderRadius: "8px" }}>
-              <Settings size={18} color="#e2e8f0" />
-            </div>
-            <h3 style={{ margin: 0, color: "#fff", fontSize: "16px", fontWeight: "600" }}>Admin Settings</h3>
-          </div>
-          <button onClick={onClose} style={{ background: "transparent", border: "none", color: "#94a3b8", cursor: "pointer" }}>
-            <X size={20} />
-          </button>
+    <ConfirmDialog
+      title="Account settings"
+      confirmLabel={saved ? "Done" : "Change password"}
+      onCancel={onClose}
+      onConfirm={saved ? onClose : save}
+      pending={pending}
+    >
+      <InlineError message={error} />
+      {saved ? (
+        <p role="status">Password updated successfully.</p>
+      ) : (
+        <div style={{ display: "grid", gap: 15 }}>
+          <label className="p-field">
+            Current password
+            <input
+              className="p-input"
+              type="password"
+              autoComplete="current-password"
+              value={current}
+              onChange={(e) => setCurrent(e.target.value)}
+            />
+          </label>
+          <label className="p-field">
+            New password
+            <input
+              className="p-input"
+              type="password"
+              autoComplete="new-password"
+              minLength={12}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </label>
+          <label className="p-field">
+            Confirm new password
+            <input
+              className="p-input"
+              type="password"
+              autoComplete="new-password"
+              value={confirmation}
+              onChange={(e) => setConfirmation(e.target.value)}
+            />
+          </label>
+          <span className="p-help">
+            Use at least 12 characters. Your active session continues after the
+            password changes.
+          </span>
         </div>
-
-        <div style={{ padding: "24px" }}>
-          <h4 style={{ margin: "0 0 16px", color: "#e2e8f0", fontSize: "14px", display: "flex", alignItems: "center", gap: "8px" }}>
-            <Lock size={16} color="#fbbf24" /> Change Password
-          </h4>
-
-          <form onSubmit={handleSubmit}>
-            <div style={{ marginBottom: "16px" }}>
-              <label style={{ display: "block", marginBottom: "6px", color: "#94a3b8", fontSize: "13px" }}>Current Password</label>
-              <input
-                type="password"
-                value={currentPassword}
-                onChange={e => setCurrentPassword(e.target.value)}
-                required
-                style={{ width: "100%", padding: "10px 14px", background: "rgba(0,0,0,0.2)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", color: "#fff", outline: "none", boxSizing: "border-box" }}
-              />
-            </div>
-            <div style={{ marginBottom: "16px" }}>
-              <label style={{ display: "block", marginBottom: "6px", color: "#94a3b8", fontSize: "13px" }}>New Password</label>
-              <input
-                type="password"
-                value={newPassword}
-                onChange={e => setNewPassword(e.target.value)}
-                required
-                style={{ width: "100%", padding: "10px 14px", background: "rgba(0,0,0,0.2)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", color: "#fff", outline: "none", boxSizing: "border-box" }}
-              />
-            </div>
-            <div style={{ marginBottom: "24px" }}>
-              <label style={{ display: "block", marginBottom: "6px", color: "#94a3b8", fontSize: "13px" }}>Confirm New Password</label>
-              <input
-                type="password"
-                value={confirmPassword}
-                onChange={e => setConfirmPassword(e.target.value)}
-                required
-                style={{ width: "100%", padding: "10px 14px", background: "rgba(0,0,0,0.2)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", color: "#fff", outline: "none", boxSizing: "border-box" }}
-              />
-            </div>
-
-            {error && <div style={{ color: "#f87171", fontSize: "13px", marginBottom: "16px", padding: "10px", background: "rgba(248,113,113,0.1)", borderRadius: "6px" }}>{error}</div>}
-            {success && <div style={{ color: "#34d399", fontSize: "13px", marginBottom: "16px", padding: "10px", background: "rgba(52,211,153,0.1)", borderRadius: "6px" }}>{success}</div>}
-
-            <button type="submit" disabled={loading} style={{
-              width: "100%", padding: "12px", background: "#fbbf24", color: "#000", border: "none", borderRadius: "8px", fontWeight: "600", cursor: loading ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px"
-            }}>
-              {loading ? "Saving..." : <><Save size={16} /> Save Changes</>}
-            </button>
-          </form>
-        </div>
-      </div>
-    </div>
+      )}
+    </ConfirmDialog>
   );
 }

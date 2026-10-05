@@ -1,185 +1,31 @@
-// Using relative path for local proxy, or environment variable for production
-const getApiBase = () => {
-  if (import.meta.env.VITE_API_URL) {
-    return import.meta.env.VITE_API_URL;
+const API_BASE = import.meta.env.VITE_API_URL || '/api';
+const queryString = (filters = {}) => new URLSearchParams(Object.entries(filters).filter(([, value]) => value !== '' && value != null)).toString();
+async function request(path, options = {}, credentials = { admin: true }) {
+  const token = credentials.admin ? sessionStorage.getItem('admin_token') : credentials.userToken;
+  const response = await fetch(`${API_BASE}${path}`, { ...options, headers: { ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}), ...options.headers } });
+  const refreshed = response.headers.get('X-Refreshed-Token');
+  if (credentials.admin && refreshed) sessionStorage.setItem('admin_token', refreshed);
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    const error = new Error(response.status === 401 ? 'Unauthorized' : data.error || `Request failed (${response.status})`);
+    error.status = response.status;
+    throw error;
   }
-  if (typeof window !== "undefined" && window.location.hostname.includes("vercel.app")) {
-    return "https://spend-analysis-moqe.onrender.com/api";
-  }
-  return "/api";
-};
-const API_BASE = getApiBase();
-
-export async function adminLogin(password) {
-  const res = await fetch(`${API_BASE}/admin/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ password }),
-  });
-  if (!res.ok) {
-    let errorMsg = "Login failed";
-    try {
-      const data = await res.json();
-      errorMsg = data.error || errorMsg;
-    } catch {
-      // Backend returned non-JSON (e.g., HTML error page from Render when server is cold)
-      if (res.status === 502 || res.status === 503) {
-        errorMsg = "Backend server is waking up. Please wait a moment and try again.";
-      } else {
-        errorMsg = `Server error (${res.status}). The backend may be unavailable.`;
-      }
-    }
-    throw new Error(errorMsg);
-  }
-  return res.json();
+  return response;
 }
-
-const getAuthHeaders = () => {
-  const token = sessionStorage.getItem("admin_token");
-  return {
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${token}`,
-  };
-};
-
-async function fetchWithAuth(url, options = {}) {
-  const headers = {
-    ...getAuthHeaders(),
-    ...options.headers,
-  };
-  const res = await fetch(url, { ...options, headers });
-  
-  // Extract and update refreshed token for "refresh on activity" session persistence
-  const refreshedToken = res.headers.get("X-Refreshed-Token");
-  if (refreshedToken) {
-    sessionStorage.setItem("admin_token", refreshedToken);
-  }
-  
-  return res;
-}
-
-export async function adminChangePassword(currentPassword, newPassword) {
-  const res = await fetchWithAuth(`${API_BASE}/admin/change-password`, {
-    method: "POST",
-    body: JSON.stringify({ currentPassword, newPassword }),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || "Failed to change password");
-  return data;
-}
-
-export async function fetchAnalyses() {
-  const res = await fetchWithAuth(`${API_BASE}/analyses?t=${Date.now()}`);
-  if (!res.ok) {
-    if (res.status === 401) throw new Error("Unauthorized");
-    throw new Error("Failed to fetch analyses");
-  }
-  return res.json();
-}
-
-export async function fetchStats() {
-  const res = await fetchWithAuth(`${API_BASE}/stats?t=${Date.now()}`);
-  if (!res.ok) {
-    throw new Error("Failed to fetch stats");
-  }
-  return res.json();
-}
-
-export async function fetchAnalysis(id) {
-  const res = await fetch(`${API_BASE}/analyses/${id}?t=${Date.now()}`);
-  if (!res.ok) throw new Error("Failed to fetch analysis");
-  return res.json();
-}
-
-export async function updateAnalysis(id, data) {
-  if (!id) return;
-  const res = await fetch(`${API_BASE}/analyses/${id}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-  });
-  if (!res.ok) throw new Error("Failed to update analysis");
-  return res.json();
-}
-
-export async function deleteAnalysis(id) {
-  const res = await fetchWithAuth(`${API_BASE}/analyses/${id}`, {
-    method: "DELETE",
-  });
-  if (!res.ok) throw new Error("Failed to delete analysis");
-  return res.json();
-}
-
-// --- Audit Logs ---
-export async function fetchAuditLogs(limit = 50, offset = 0) {
-  const res = await fetchWithAuth(`${API_BASE}/admin/audit-logs?limit=${limit}&offset=${offset}&t=${Date.now()}`);
-  if (!res.ok) throw new Error("Failed to fetch audit logs");
-  return res.json();
-}
-
-// --- API Usage ---
-export async function fetchApiUsage() {
-  const res = await fetchWithAuth(`${API_BASE}/admin/api-usage?t=${Date.now()}`);
-  if (!res.ok) throw new Error("Failed to fetch API usage");
-  return res.json();
-}
-
-// --- Log CSV Export ---
-export async function logCsvExport() {
-  const res = await fetchWithAuth(`${API_BASE}/admin/log-export`, {
-    method: "POST",
-  });
-  if (!res.ok) throw new Error("Failed to log export");
-  return res.json();
-}
-// --- Server Health ---
-export async function pingServer() {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
-
-  try {
-    const res = await fetch(`${API_BASE}/ping`, { signal: controller.signal });
-    clearTimeout(timeoutId);
-    if (!res.ok) throw new Error("Server not responding");
-    return true;
-  } catch (err) {
-    clearTimeout(timeoutId);
-    throw err;
-  }
-}
-
-// --- User Account Endpoints ---
-export async function fetchUserAnalyses(userToken) {
-  const res = await fetch(`${API_BASE}/v2/me/analyses`, {
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${userToken}`,
-    },
-  });
-  if (!res.ok) throw new Error("Failed to fetch user history");
-  return res.json();
-}
-
-export async function fetchUserStats(userToken) {
-  const res = await fetch(`${API_BASE}/v2/me/stats`, {
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${userToken}`,
-    },
-  });
-  if (!res.ok) throw new Error("Failed to fetch user statistics");
-  return res.json();
-}
-
-export async function deleteUserAnalysis(id, userToken) {
-  const res = await fetch(`${API_BASE}/v2/me/analyses/${id}`, {
-    method: "DELETE",
-    headers: {
-      Authorization: `Bearer ${userToken}`,
-    },
-  });
-  if (!res.ok) throw new Error("Failed to delete analysis");
-  return res.json();
-}
-
-
+const json = async (...args) => (await request(...args)).json();
+export const adminLogin = password => json('/admin/login', { method: 'POST', body: JSON.stringify({ password }) }, {});
+export const adminChangePassword = (currentPassword, newPassword) => json('/admin/change-password', { method: 'POST', body: JSON.stringify({ currentPassword, newPassword }) });
+export const fetchAnalyses = (filters = {}) => json(`/analyses?${queryString(filters)}`);
+export const fetchStats = () => json('/stats');
+export const fetchAnalysis = (id, credentials = {}) => json(`/analyses/${encodeURIComponent(id)}`, {}, credentials);
+export const updateAnalysis = (id, changes, credentials = {}) => json(`/analyses/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(changes) }, credentials);
+export const deleteAnalysis = id => json(`/analyses/${encodeURIComponent(id)}`, { method: 'DELETE' });
+export const fetchAuditLogs = (filters = {}) => json(`/admin/audit-logs?${queryString(filters)}`);
+export const fetchApiUsage = () => json('/admin/api-usage');
+export const logCsvExport = () => json('/admin/log-export', { method: 'POST' });
+export const exportAnalyses = async filters => (await request(`/admin/export?${queryString(filters)}`)).blob();
+export const fetchUserAnalyses = userToken => json('/v2/me/analyses', {}, { userToken });
+export const fetchUserStats = userToken => json('/v2/me/stats', {}, { userToken });
+export const deleteUserAnalysis = (id, userToken) => json(`/v2/me/analyses/${encodeURIComponent(id)}`, { method: 'DELETE' }, { userToken });
+export async function pingServer() { await request('/ping', { signal: AbortSignal.timeout(10000) }, {}); return true; }

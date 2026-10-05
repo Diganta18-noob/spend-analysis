@@ -1,4 +1,4 @@
-import React, { createContext, useContext } from "react";
+import { createContext, useContext } from "react";
 import { ClerkProvider, useAuth as useClerkAuth, useUser as useClerkUser } from "@clerk/clerk-react";
 
 const AuthContext = createContext({
@@ -10,6 +10,8 @@ const AuthContext = createContext({
   signOut: async () => {},
 });
 
+// The authentication hook intentionally shares its provider context.
+// eslint-disable-next-line react-refresh/only-export-components
 export const useAuth = () => useContext(AuthContext);
 
 function ClerkAuthShim({ children }) {
@@ -24,7 +26,7 @@ function ClerkAuthShim({ children }) {
     getToken: async () => {
       try {
         return await getToken();
-      } catch (e) {
+      } catch {
         return null;
       }
     },

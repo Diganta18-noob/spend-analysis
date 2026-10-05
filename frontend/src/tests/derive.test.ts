@@ -35,9 +35,9 @@ describe("normaliseTransactions", () => {
     expect(normaliseTransactions([])).toEqual([]);
   });
 
-  it("defaults a short or missing date to 2026-06-01, matching current behaviour", () => {
-    expect(normaliseTransactions([{ date: "5-12" }])[0].date).toBe("2026-06-01");
-    expect(normaliseTransactions([{}])[0].date).toBe("2026-06-01");
+  it("keeps a short or missing date unknown", () => {
+    expect(normaliseTransactions([{ date: "5-12" }])[0].date).toBe("");
+    expect(normaliseTransactions([{}])[0].date).toBe("");
   });
 
   it("defaults a missing description to Unknown Merchant", () => {
@@ -96,12 +96,12 @@ describe("totalSpent", () => {
 describe("dailySeries and dailyBreakdown", () => {
   it("buckets transactions by day of month", () => {
     const series = dailySeries(TXNS);
-    const day12 = series.find((p) => p.day === "12");
+    const day12 = series.find((p) => p.day === "2026-05-12");
     expect(day12?.amount).toBe(2162);
   });
 
   it("returns category totals for a specific day", () => {
-    const breakdown = dailyBreakdown(TXNS, "12");
+    const breakdown = dailyBreakdown(TXNS, "2026-05-12");
     expect(breakdown).toHaveLength(2);
   });
 });

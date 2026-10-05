@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import { useEffect } from "react";
 import { Check, X, Layers } from "lucide-react";
 
 export default function Toast({ show, txnDesc, newCat, onApplyOne, onApplyAll, onDismiss }) {

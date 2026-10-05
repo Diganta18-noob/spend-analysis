@@ -1,5 +1,7 @@
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
+import { accessFilter, analysisFilter, applyCategoryEdits, escapeSearch } from './lib/analysisPolicy.js';
+import { summarizeMoney } from './lib/analysisQuality.js';
 
 // ────────────────────────────── Schemas ──────────────────────────────
 
@@ -106,6 +108,49 @@ export async function getAnalysisById(id) {
   return Analysis.findOne({ id }).lean();
 }
 
+export async function getAccessibleAnalysis(id, access) {
+  return Analysis.findOne(accessFilter(id, access)).lean();
+}
+export async function updateAccessibleAnalysis(id, edits, access) {
+  const filter = accessFilter(id, access);
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const record = await Analysis.findOne(filter).lean();
+    if (!record) return null;
+    const data = applyCategoryEdits(record.data, edits);
+    // Category corrections do not change statement balances or transaction amounts.
+    // Preserve the reconciliation recorded before sensitive balances were redacted.
+    const versionFilter = record.__v == null ? { $or: [{ __v: { $exists: false } }, { __v: 0 }] } : { __v: record.__v };
+    const updated = await Analysis.findOneAndUpdate({ ...filter, ...versionFilter }, {
+      $set: { data, total_spent: summarizeMoney(data.transactions).netSpend / 100, transaction_count: data.transactions.length },
+      $inc: { __v: 1 },
+    }, { new: true }).lean();
+    if (updated) return updated;
+  }
+  throw Object.assign(new Error('Analysis changed concurrently. Retry your category correction.'), { status: 409 });
+}
+export async function listAnalyses(options) {
+  const { limit = 25, offset = 0 } = options;
+  const filter = analysisFilter(options);
+  const [items, total, banks] = await Promise.all([
+    Analysis.find(filter).select('id created_at period bank account_holder total_spent transaction_count data.quality').sort({ created_at: -1, id: 1 }).skip(offset).limit(limit).lean(),
+    Analysis.countDocuments(filter),
+    Analysis.distinct('bank'),
+  ]);
+  return { items: items.map(({ data, ...row }) => ({ ...row, quality: data?.quality })), total, limit, offset, banks: banks.filter(Boolean).sort() };
+}
+export function analysisExportCursor(options) {
+  return Analysis.find(analysisFilter(options)).select('id created_at period bank account_holder total_spent transaction_count').sort({ created_at: -1, id: 1 }).lean().cursor({ batchSize: 100 });
+}
+export async function listAuditLogs(options) {
+  const { action, query, from, to, limit = 25, offset = 0 } = options;
+  const filter = {};
+  if (action) filter.action = action;
+  if (query) filter.$or = ['details', 'action', 'ip'].map(key => ({ [key]: { $regex: escapeSearch(query), $options: 'i' } }));
+  if (from || to) filter.timestamp = analysisFilter({ from, to }).created_at;
+  const [items, total] = await Promise.all([AuditLog.find(filter).sort({ timestamp: -1, id: 1 }).skip(offset).limit(limit).lean(), AuditLog.countDocuments(filter)]);
+  return { items, total, limit, offset };
+}
+
 export async function updateAnalysis(id, data) {
   const totalSpent = (data.transactions || [])
     .filter(t => t.cat !== "Self Transfer")
@@ -120,8 +165,8 @@ export async function updateAnalysis(id, data) {
   });
 }
 
-export async function deleteAnalysis(id) {
-  await Analysis.deleteOne({ id });
+export async function deleteAnalysis(id, ownerId) {
+  return Analysis.deleteOne(ownerId ? { id, owner_id: ownerId } : { id });
 }
 
 export async function getStats() {
@@ -238,7 +283,8 @@ export async function migrateAdminPassword() {
   try {
     const count = await Admin.countDocuments();
     if (count === 0) {
-      const plainPassword = process.env.ADMIN_PASSWORD || "admin123";
+      const plainPassword = process.env.ADMIN_PASSWORD;
+      if (!plainPassword || plainPassword.length < 12) throw new Error('ADMIN_PASSWORD must be explicitly configured with at least 12 characters to provision an admin');
       const hash = await bcrypt.hash(plainPassword, 10);
       await Admin.create({
         username: "admin",

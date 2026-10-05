@@ -294,3 +294,16 @@ git diff --staged
 
 *See PROJECT_RULES.md for canonical rules.*
 *See docs/model-selection-playbook.md for model guidance.*
+
+## Portal configuration and API changes (2026-10-06)
+
+- Backend requires `JWT_SECRET` with at least 32 characters, `MONGODB_URI`, and `ADMIN_PASSWORD` with at least 12 characters when creating the initial administrator. Existing administrator hashes are preserved. There is no default admin password or JWT secret.
+- Configure `CLERK_JWT_KEY` with the Clerk RS256 public key for signed-in analysis/history. Frontend uses `VITE_CLERK_PUBLISHABLE_KEY`. Missing optional auth headers permit anonymous analysis; invalid supplied credentials fail rather than silently becoming anonymous.
+- Configure `GEMINI_API_KEY` or the existing supported proxy settings for extraction. Set `VITE_API_URL` to the backend API base ending in `/api` when hosting separately, with appropriate backend CORS origins. All frontend services use this base consistently. Local Vite proxies `/api` to port 3001.
+- Detail/category routes require owner credentials or verified administrator credentials. Category writes accept `{ "edits": [{ "index": 0, "cat": "Shopping" }] }`; full financial-payload replacement is rejected. Inaccessible records return 404.
+- Admin analysis and audit lists return `{items,total,limit,offset}` (analyses also include banks). Filters apply before pagination. `/api/admin/export` exports the full filtered set through a database cursor.
+- Anonymous analyses return `id: null` and `session_only: true`; leaving/reloading loses the result. Sign in before uploading to persist history. Financial results are not cached in browser storage; theme preferences and the admin session token remain stored.
+- Quality metadata is additive. Reconciliation is unavailable for missing metadata, unsupported card statements, and combined files. Review unknown dates and balance mismatches against originals. AI output remains fallible.
+- Account-holder metadata remains in existing database storage for administrators. PII redaction does not establish full anonymization; consult `project-improvements.md` for retention/privacy work.
+
+Run backend `npm test`, and frontend `npm test`, `npm run build`, `npm run typecheck`, `npm run lint`. Backend's lint script remains a placeholder. See `portal-validation.md` for live-service verification limits. Never commit credentials or real financial fixtures.

@@ -87,7 +87,7 @@ export default async function handler(req, res) {
     try {
       const data = JSON.parse(responseText);
       return res.status(geminiResponse.status).json(data);
-    } catch (_) {
+    } catch {
       // Non-JSON response from Gemini (HTML error page, etc.)
       return res.status(geminiResponse.status >= 400 ? geminiResponse.status : 502).json({
         error: `Gemini returned non-JSON response (${geminiResponse.status}): ${responseText.substring(0, 500)}`,

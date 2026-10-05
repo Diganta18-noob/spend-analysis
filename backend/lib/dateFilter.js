@@ -93,10 +93,10 @@ export function filterTransactionsByPeriod(transactions, periodStr) {
     const endMs = range.endDate.getTime() + (5 * 24 * 60 * 60 * 1000);     // 5-day buffer after
     
     return transactions.filter(t => {
-      if (!t.date) return false;
+      if (!t.date) return true;
       const txDate = new Date(t.date);
       const txMs = txDate.getTime();
-      if (isNaN(txMs)) return false;
+      if (isNaN(txMs)) return true;
       return txMs >= startMs && txMs <= endMs;
     });
   }
@@ -109,10 +109,10 @@ export function filterTransactionsByPeriod(transactions, periodStr) {
   if (yearsInPeriod.length > 0) {
     const uniqueYears = [...new Set(yearsInPeriod)];
     return transactions.filter(t => {
-      if (!t.date) return false;
+      if (!t.date) return true;
       const txDate = new Date(t.date);
       const txYear = txDate.getFullYear();
-      if (isNaN(txYear)) return false;
+      if (isNaN(txYear)) return true;
       return uniqueYears.includes(txYear);
     });
   }
@@ -138,14 +138,14 @@ export function filterTransactionsByPeriod(transactions, periodStr) {
       }
     }
     return transactions.filter(t => {
-      if (!t.date) return false;
+      if (!t.date) return true;
       const txDate = new Date(t.date);
       const txYear = txDate.getFullYear();
-      if (isNaN(txYear)) return false;
+      if (isNaN(txYear)) return true;
       return txYear === mostCommonYear;
     });
   }
 
   // Otherwise, just keep all transactions with valid dates
-  return transactions.filter(t => t.date && !isNaN(new Date(t.date).getTime()));
+  return transactions;
 }

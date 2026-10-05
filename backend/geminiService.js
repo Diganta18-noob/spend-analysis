@@ -130,6 +130,7 @@ Common vendor patterns:
 const MAX_RETRIES = 2; // Will attempt up to 2 more times if issues detected
 
 export const PAGE_EXTRACTION_PROMPT = `You are a highly accurate bank statement OCR and transaction extraction engine.
+Report statement_type as "bank_account" only for deposit-account statements, "credit_card" for card statements, or null if uncertain. total_credits must be the statement-wide reported total credits including refunds, never an inferred per-page subtotal. Use null when balances or total credits are absent.
 
 PRIMARY RULE: Accuracy of numbers is MORE IMPORTANT than speed. Never estimate, round, infer, or invent amounts.
 
@@ -145,6 +146,7 @@ STRICT RULES:
 9. SIGN CONVENTION & BILL PAYMENTS: Spends, purchases, and debit transactions MUST be represented as POSITIVE numbers. Merchant refunds, credits, or purchase reversals (often ending in CR/Cr) MUST be represented as NEGATIVE numbers. NEVER swap them.
 10. EXCLUDE CREDIT CARD BILL PAYMENTS: Do not extract payments representing the user paying their credit card bill (e.g., "Payment received", "Mobile Banking Payment", "Internet Banking Payment", "Auto-payment", "BBPS Payment", or similar bank transfers to the credit card). Only spends and merchant refunds should be extracted.
 11. If a "STATEMENT SUMMARY" box is visible, extract "Total Credits" for the total_credits field.
+For reward totals, include reward_total_scope: "statement" ONLY if an explicit statement-wide reward summary is visible. Page transaction sums are not statement totals; omit the scope otherwise.
 12. REWARD POINTS: Look for a column containing reward points (often labeled 'Reward Points' or 'Points Earned' on page 1, but may appear without headers on subsequent pages). If you see a column of integers next to the amounts representing points earned/reversed, extract them for each transaction into the 'reward_points' field (preserving negative numbers for refunds). If no such column exists, set it to null. For page continuations where headers are missing, identify the reward points column based on its relative position to the amount column or from the values (typically small integers, or negative numbers for refunds).
 13. DO NOT extract illustrative examples, terms & conditions, interest/fee calculation tables, or sample transactions that are printed as explanations at the back of the statement. Only extract actual transactions charged to the account during the statement period.
 
@@ -317,6 +319,7 @@ async function callGeminiModel(modelName, apiKey, imageParts, promptText, temper
 }
 
 export async function analyzeStatementsServer(files, prompt = AI_PROMPT) {
+  const insightsOnly = files.length === 0 && prompt !== AI_PROMPT;
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey || apiKey === "your_gemini_api_key_here" || apiKey === "") {
     throw new Error("Missing Gemini API key. Please check your .env file.");
@@ -387,13 +390,14 @@ export async function analyzeStatementsServer(files, prompt = AI_PROMPT) {
                   throw new Error("AI returned invalid JSON. Please try again.");
                 }
 
+                if (insightsOnly && Array.isArray(parsed.insights)) parsed.transactions = [];
                 if (!parsed.transactions || !Array.isArray(parsed.transactions)) {
                   console.error(`[Gemini] Attempt ${attempt + 1} missing transactions array`);
                   throw new Error("Invalid response format: missing transactions array.");
                 }
 
                 // If we got 0 transactions, retry with enhanced prompt
-                if (parsed.transactions.length === 0 && attempt < MAX_RETRIES) {
+                if (!insightsOnly && parsed.transactions.length === 0 && attempt < MAX_RETRIES) {
                   console.warn(`[Gemini] Attempt ${attempt + 1} returned 0 transactions — retrying with enhanced prompt...`);
                   throw new Error("AI returned 0 transactions. Please try again.");
                 }
@@ -610,4 +614,3 @@ function fixMisclassifiedCategories(transactions) {
     return t;
   });
 }
-

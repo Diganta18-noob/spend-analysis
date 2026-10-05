@@ -1,168 +1,200 @@
-import React, { useEffect, useState } from "react";
+import { useState } from "react";
+import {
+  BarChart,
+  Bar,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
+import { Activity, CheckCircle, XCircle, Timer } from "lucide-react";
 import { fetchApiUsage } from "../../services/apiService";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
-import { Zap, CheckCircle, XCircle, Clock } from "lucide-react";
-
-const CustomTooltip = ({ active, payload, label }) => {
-  if (!active || !payload?.length) return null;
-  return (
-    <div style={{ background: "#0d0d1a", border: "1px solid #2a2a40", borderRadius: 8, padding: "8px 14px" }}>
-      <div style={{ color: "#94a3b8", fontSize: 11, marginBottom: 3 }}>{label}</div>
-      <div style={{ color: "#fbbf24", fontWeight: 700, fontSize: 14 }}>{payload[0]?.value} calls</div>
-    </div>
-  );
-};
-
+import { useResource } from "../../hooks/useResource";
+import {
+  Card,
+  StatCard,
+  Button,
+  InlineError,
+  Skeleton,
+  EmptyState,
+} from "../ui/PortalUI";
 export default function ApiUsageTab() {
-  const [usage, setUsage] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-
-  useEffect(() => {
-    loadUsage();
-    // Auto-refresh every 30 seconds so errors show up immediately
-    const interval = setInterval(loadUsage, 30000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const loadUsage = () => {
-    setRefreshing(true);
-    const startTime = Date.now();
-    fetchApiUsage()
-      .then(data => {
-        const elapsed = Date.now() - startTime;
-        const remaining = Math.max(0, 600 - elapsed);
-        setTimeout(() => {
-          setUsage(data);
-          setLoading(false);
-          setRefreshing(false);
-        }, remaining);
-      })
-      .catch(err => {
-        console.error("Failed to load API usage:", err);
-        const elapsed = Date.now() - startTime;
-        const remaining = Math.max(0, 600 - elapsed);
-        setTimeout(() => {
-          setLoading(false);
-          setRefreshing(false);
-        }, remaining);
-      });
-  };
-
-  if (loading) return <div style={{ color: "#64748b", padding: 40, textAlign: "center" }}>Loading API usage...</div>;
-  if (!usage) return <div style={{ color: "#64748b", padding: 40, textAlign: "center" }}>No API usage data yet.</div>;
-
-  const { aggregate, daily } = usage;
-  const successRate = aggregate.total_calls > 0 ? ((aggregate.successful_calls / aggregate.total_calls) * 100).toFixed(1) : "0";
-  // Rough cost estimate: Gemini Flash is ~$0.075/1M input tokens
-  const estimatedCost = ((aggregate.total_tokens_estimated / 1_000_000) * 0.075).toFixed(4);
-
-  const chartData = daily.map(d => ({
-    date: d.date.slice(5), // MM-DD
-    calls: d.total_calls,
-    failed: d.failed_calls,
-  }));
-
-  return (
-    <div>
-      {/* Stat Cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginBottom: 24 }}>
-        <MiniCard icon={<Zap size={18} />} color="#fbbf24" title="Total API Calls" value={aggregate.total_calls} />
-        <MiniCard icon={<CheckCircle size={18} />} color="#34d399" title="Success Rate" value={`${successRate}%`} />
-        <MiniCard icon={<Clock size={18} />} color="#60a5fa" title="Avg Latency" value={`${aggregate.avg_latency_ms}ms`} />
-        <MiniCard icon={<XCircle size={18} />} color="#f87171" title="Failed Calls" value={aggregate.failed_calls} />
-      </div>
-
-      {/* Chart */}
-      {chartData.length > 0 && (
-        <div style={{ background: "#0a0a18", borderRadius: 12, border: "1px solid #1c1c35", padding: 16, marginBottom: 20 }}>
-          <div style={{ fontSize: 11, color: "#475569", textTransform: "uppercase", letterSpacing: "1.2px", fontWeight: 600, marginBottom: 12 }}>
-            Daily API Calls (Last 30 Days)
-          </div>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={chartData} barSize={14} margin={{ top: 4, right: 4, bottom: 0, left: -10 }}>
-              <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#334155", fontFamily: "DM Mono, monospace" }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 10, fill: "#334155" }} axisLine={false} tickLine={false} allowDecimals={false} />
-              <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(255,255,255,0.03)" }} />
-              <Bar dataKey="calls" radius={[4, 4, 0, 0]}>
-                {chartData.map((d, i) => (
-                  <Cell key={i} fill={d.failed > 0 ? "#f87171" : "#fbbf24"} opacity={0.85} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-
-      {/* Token & Cost Summary */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        <div style={{ background: "#0a0a18", borderRadius: 12, border: "1px solid #1c1c35", padding: 16 }}>
-          <div style={{ fontSize: 11, color: "#475569", textTransform: "uppercase", letterSpacing: "1.2px", fontWeight: 600, marginBottom: 8 }}>Estimated Tokens</div>
-          <div style={{ fontSize: 22, fontWeight: 800, color: "#a78bfa", fontFamily: "DM Mono, monospace" }}>
-            {aggregate.total_tokens_estimated.toLocaleString()}
-          </div>
-          <div style={{ fontSize: 11, color: "#475569", marginTop: 4 }}>across {aggregate.total_calls} API calls</div>
-        </div>
-        <div style={{ background: "#0a0a18", borderRadius: 12, border: "1px solid #1c1c35", padding: 16 }}>
-          <div style={{ fontSize: 11, color: "#475569", textTransform: "uppercase", letterSpacing: "1.2px", fontWeight: 600, marginBottom: 8 }}>Est. Cost (30d)</div>
-          <div style={{ fontSize: 22, fontWeight: 800, color: "#34d399", fontFamily: "DM Mono, monospace" }}>
-            ${estimatedCost}
-          </div>
-          <div style={{ fontSize: 11, color: "#475569", marginTop: 4 }}>Gemini Flash pricing</div>
-        </div>
-      </div>
-
-      {/* Recent Errors */}
-      {daily.some(d => d.errors?.length > 0) && (
-        <div style={{ marginTop: 20, background: "#0a0a18", borderRadius: 12, border: "1px solid rgba(248,113,113,0.15)", padding: 16 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-            <div style={{ fontSize: 11, color: "#f87171", textTransform: "uppercase", letterSpacing: "1.2px", fontWeight: 600 }}>Recent Errors</div>
-            <button 
-              onClick={loadUsage} 
-              disabled={refreshing}
-              style={{ 
-                background: "transparent", 
-                border: "1px solid rgba(248,113,113,0.2)", 
-                color: "#f87171", 
-                fontSize: 10, 
-                padding: "3px 8px", 
-                borderRadius: 4, 
-                cursor: refreshing ? "not-allowed" : "pointer", 
-                fontFamily: "inherit",
-                opacity: refreshing ? 0.6 : 1
-              }}
-            >
-              {refreshing ? "↻ Refreshing..." : "↻ Refresh"}
-            </button>
-          </div>
-          {daily.filter(d => d.errors?.length > 0).slice(-5).flatMap(d => d.errors.slice(-10).map((e, i) => (
-            <div key={`${d.date}-${i}`} style={{ fontSize: 12, color: "#fca5a5", padding: "6px 0", borderBottom: "1px solid rgba(255,255,255,0.02)" }}>
-              <span style={{ color: "#475569", fontFamily: "DM Mono, monospace", fontSize: 10, marginRight: 8 }}>
-                {new Date(e.time).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
-              </span>
-              {e.message}
-            </div>
-          )))}
-        </div>
-      )}
-    </div>
+  const { data, loading, error, refresh } = useResource(fetchApiUsage);
+  const [period, setPeriod] = useState("30");
+  const cutoff = new Date();
+  cutoff.setUTCDate(cutoff.getUTCDate() - Number(period) + 1);
+  const rows = (data?.daily || []).filter(
+    (row) => row.date >= cutoff.toISOString().slice(0, 10),
   );
-}
-
-function MiniCard({ icon, color, title, value }) {
+  const calls = rows.reduce((sum, row) => sum + row.total_calls, 0);
+  const failures = rows.reduce((sum, row) => sum + row.failed_calls, 0);
+  const latencies = rows
+    .flatMap((row) => row.latencies || [])
+    .filter(Number.isFinite);
+  const latency = latencies.length
+    ? latencies.reduce((sum, value) => sum + value, 0) / latencies.length
+    : null;
+  const errors = rows
+    .flatMap((row) =>
+      (row.errors || []).map((item) => ({ ...item, date: row.date })),
+    )
+    .sort((a, b) => b.time.localeCompare(a.time));
   return (
-    <div style={{
-      background: "#0a0a18", border: "1px solid #1c1c35", borderRadius: 12,
-      padding: "14px 16px", display: "flex", alignItems: "center", gap: 12,
-    }}>
-      <div style={{
-        width: 36, height: 36, borderRadius: 10, background: `${color}15`,
-        color, display: "flex", alignItems: "center", justifyContent: "center",
-      }}>{icon}</div>
-      <div>
-        <div style={{ color: "#64748b", fontSize: 11, marginBottom: 2 }}>{title}</div>
-        <div style={{ color: "#fff", fontSize: 18, fontWeight: 700, fontFamily: "DM Mono, monospace" }}>{value}</div>
+    <>
+      <div className="p-page-heading">
+        <div>
+          <p className="p-eyebrow">THE EXTRACTION ENGINE</p>
+          <h1>API usage</h1>
+          <p>Request volume, recorded outcomes, and successful-call latency.</p>
+        </div>
+        <div className="p-heading-actions">
+          <select
+            aria-label="Usage period"
+            value={period}
+            onChange={(e) => setPeriod(e.target.value)}
+          >
+            <option value="7">Last 7 days</option>
+            <option value="30">Last 30 days</option>
+          </select>
+          <Button onClick={refresh} disabled={loading}>
+            Refresh
+          </Button>
+        </div>
       </div>
-    </div>
+      <InlineError message={error} onRetry={refresh} />
+      {loading ? (
+        <Skeleton label="Loading API usage…" />
+      ) : (
+        data && (
+          <>
+            <div className="p-stats">
+              <StatCard
+                label="Total calls"
+                value={calls}
+                detail={`Recorded in the last ${period} days`}
+                icon={Activity}
+              />
+              <StatCard
+                label="Successful calls"
+                value={calls - failures}
+                detail="Provider requests completed"
+                icon={CheckCircle}
+              />
+              <StatCard
+                label="Failed calls"
+                value={failures}
+                detail={
+                  calls
+                    ? `${((failures / calls) * 100).toFixed(1)}% of recorded calls`
+                    : "No calls recorded"
+                }
+                icon={XCircle}
+              />
+              <StatCard
+                label="Average latency"
+                value={
+                  latency == null ? "—" : `${(latency / 1000).toFixed(1)}s`
+                }
+                detail="Sampled successful provider calls"
+                icon={Timer}
+              />
+            </div>
+            <Card
+              title="Daily request activity"
+              subtitle="Recorded successful and failed calls; missing days have no stored record"
+            >
+              {rows.length ? (
+                <div className="p-chart">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={rows}
+                      margin={{ top: 15, left: -10, right: 20 }}
+                    >
+                      <CartesianGrid
+                        stroke="var(--border)"
+                        vertical={false}
+                        strokeDasharray="3 5"
+                      />
+                      <XAxis
+                        dataKey="date"
+                        tick={{ fill: "var(--text-muted)", fontSize: 10 }}
+                        axisLine={false}
+                        tickLine={false}
+                      />
+                      <YAxis
+                        allowDecimals={false}
+                        tick={{ fill: "var(--text-muted)", fontSize: 10 }}
+                        axisLine={false}
+                        tickLine={false}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          background: "var(--elevated)",
+                          border: "1px solid var(--border)",
+                          color: "var(--text)",
+                          borderRadius: 8,
+                        }}
+                      />
+                      <Bar
+                        dataKey="successful_calls"
+                        name="Successful"
+                        stackId="calls"
+                        fill="var(--info)"
+                      />
+                      <Bar
+                        dataKey="failed_calls"
+                        name="Failed"
+                        stackId="calls"
+                        fill="var(--danger)"
+                        radius={[4, 4, 0, 0]}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <EmptyState
+                  title="No recorded requests"
+                  message="Provider request activity will appear after statements are analyzed."
+                />
+              )}
+            </Card>
+            <Card
+              title="Recent provider errors"
+              subtitle="Recorded failures retained by the usage monitor"
+              style={{ marginTop: 20 }}
+            >
+              {errors.length ? (
+                <div className="p-table-wrap">
+                  <table className="p-table">
+                    <thead>
+                      <tr>
+                        <th>Time</th>
+                        <th>Details</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {errors.slice(0, 30).map((item, index) => (
+                        <tr key={index}>
+                          <td>{new Date(item.time).toLocaleString("en-IN")}</td>
+                          <td style={{ whiteSpace: "normal" }}>
+                            {item.message}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <EmptyState
+                  title="No recorded errors"
+                  message="No provider failures were recorded in the selected period."
+                />
+              )}
+            </Card>
+          </>
+        )
+      )}
+    </>
   );
 }

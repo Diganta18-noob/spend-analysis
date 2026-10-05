@@ -1,4 +1,3 @@
-import React from "react";
 import { SignInButton, UserButton } from "@clerk/clerk-react";
 import { useAuth } from "./auth/AuthProvider";
 

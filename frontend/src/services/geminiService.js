@@ -1,13 +1,4 @@
-const getApiBase = () => {
-  if (import.meta.env.VITE_API_URL) {
-    return import.meta.env.VITE_API_URL;
-  }
-  if (typeof window !== "undefined" && window.location.hostname.includes("vercel.app")) {
-    return "https://spend-analysis-moqe.onrender.com/api";
-  }
-  return "/api";
-};
-const API_BASE = getApiBase();
+const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
 /**
  * Send bank statement images to the backend for analysis.
@@ -66,7 +57,7 @@ export async function analyzeStatements(files, pdfPasswords = {}) {
  * @param {Function} onProgress - Callback function that receives { event, data }
  * @returns {Promise<object>} - The final analysis result
  */
-export async function analyzeStatementsV2(files, pdfPasswords = {}, onProgress, userToken = null) {
+export async function analyzeStatementsV2(files, pdfPasswords = {}, onProgress, userToken = null, signal) {
   const formData = new FormData();
 
   if (Object.keys(pdfPasswords).length > 0) {
@@ -86,6 +77,7 @@ export async function analyzeStatementsV2(files, pdfPasswords = {}, onProgress, 
     method: "POST",
     headers,
     body: formData,
+      signal,
   });
 
   if (!response.ok) {

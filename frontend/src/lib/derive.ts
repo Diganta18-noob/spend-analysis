@@ -4,7 +4,7 @@ import type {
   Analysis,
   StoredAnalysis,
 } from "./types";
-import { normaliseMerchant, dayOfMonth, parseStatementDate } from "./format";
+import { normaliseMerchant, calendarDateKey, parseStatementDate } from "./format";
 
 export type CategoryTotal = {
   name: string;
@@ -48,11 +48,9 @@ export type DailyPoint = {
 export function normaliseTransactions(raw: RawTransaction[] | undefined): Transaction[] {
   if (!Array.isArray(raw)) return [];
 
-  return raw.map((t) => {
+  return raw.map((t, sourceIndex) => {
     let dateStr = typeof t.date === "string" ? t.date.trim() : "";
-    if (dateStr.length < 8) {
-      dateStr = "2026-06-01";
-    }
+    dateStr = calendarDateKey(dateStr) || '';
 
     const descStr = typeof t.desc === "string" && t.desc.trim() ? t.desc.trim() : "Unknown Merchant";
     const amtNum = typeof t.amount === "number" && Number.isFinite(t.amount) ? t.amount : 0;
@@ -67,6 +65,7 @@ export function normaliseTransactions(raw: RawTransaction[] | undefined): Transa
     }
 
     return {
+      sourceIndex,
       date: dateStr,
       desc: descStr,
       amount: amtNum,
@@ -102,25 +101,24 @@ export function categoryTotals(txns: Transaction[]): CategoryTotal[] {
 
 /** Calculate total spent across transactions. */
 export function totalSpent(txns: Transaction[]): number {
-  return txns.reduce((sum, t) => sum + t.amount, 0);
+  return txns.reduce((sum, t) => sum + Math.round(t.amount * 100), 0) / 100;
 }
 
 /** Group transactions by day of month. */
 export function dailySeries(txns: Transaction[]): DailyPoint[] {
   const map: Record<string, number> = {};
   for (const t of txns) {
-    const dayKey = String(dayOfMonth(t.date));
-    map[dayKey] = (map[dayKey] || 0) + t.amount;
+    const dayKey = calendarDateKey(t.date);
+    if (dayKey) map[dayKey] = (map[dayKey] || 0) + Math.round(t.amount * 100);
   }
   return Object.entries(map)
-    .map(([day, amount]) => ({ day, amount }))
-    .sort((a, b) => Number(a.day) - Number(b.day));
+    .map(([day, amount]) => ({ day, amount: amount / 100 }))
+    .sort((a, b) => a.day.localeCompare(b.day));
 }
 
 /** Get category breakdown for a specific day of month. */
 export function dailyBreakdown(txns: Transaction[], day: string): CategoryTotal[] {
-  const dayNum = Number(day);
-  const filtered = txns.filter((t) => dayOfMonth(t.date) === dayNum);
+  const filtered = txns.filter((t) => calendarDateKey(t.date) === day);
   return categoryTotals(filtered);
 }
 
@@ -239,6 +237,7 @@ export function totalRewardPoints(txns: Transaction[]): number {
 
 /** Detailed reward point statistics. */
 export function rewardStats(txns: Transaction[], declaredTotal?: number | null): RewardStats | null {
+  if (declaredTotal != null && !Number.isFinite(declaredTotal)) declaredTotal = null;
   if (!hasRewardPoints(txns) && (declaredTotal === undefined || declaredTotal === null)) {
     return null;
   }
@@ -258,7 +257,7 @@ export function rewardStats(txns: Transaction[], declaredTotal?: number | null):
     }
   }
 
-  const net = declaredTotal ?? (earned - redeemed);
+  const net = hasRewardPoints(txns) ? earned - redeemed : declaredTotal ?? 0;
 
   let topCategory: string | null = null;
   let topCategoryPoints = 0;

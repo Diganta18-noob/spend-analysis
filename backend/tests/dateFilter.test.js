@@ -47,28 +47,28 @@ describe("dateFilter utility", () => {
       { date: "2026-06-13", desc: "Amazon (buffer)", amount: 500 }, // Valid (within 5-day buffer after June 12)
       { date: "2023-09-20", desc: "Sample illustration", amount: 2000 }, // Invalid (out of range)
       { date: "2025-10-15", desc: "Late payment fee sample", amount: 900 }, // Invalid (out of range)
-      { date: null, desc: "Tax convenience", amount: 3.6 }, // Invalid (no date)
-      { date: "invalid-date", desc: "Bad date", amount: 10 }, // Invalid (bad date)
+      { date: null, desc: "Tax convenience", amount: 3.6 }, // Retained for quality review (no date)
+      { date: "invalid-date", desc: "Bad date", amount: 10 }, // Retained for quality review (bad date)
     ];
 
     it("should correctly filter transactions within period and safety buffer", () => {
       const result = filterTransactionsByPeriod(transactions, "May 13, 2026 to June 12, 2026");
-      expect(result.length).toBe(3);
-      expect(result.map(t => t.desc)).toEqual(["Swiggy", "Zomato (buffer)", "Amazon (buffer)"]);
+      expect(result.length).toBe(5);
+      expect(result.map(t => t.desc)).toEqual(["Swiggy", "Zomato (buffer)", "Amazon (buffer)", "Tax convenience", "Bad date"]);
     });
 
     it("should fallback to year-based filtering when period is a single date with a year", () => {
       const result = filterTransactionsByPeriod(transactions, "June 12, 2026");
       // Extracts 2026 from the period string and filters by year
-      expect(result.length).toBe(3);
-      expect(result.map(t => t.desc)).toEqual(["Swiggy", "Zomato (buffer)", "Amazon (buffer)"]);
+      expect(result.length).toBe(5);
+      expect(result.map(t => t.desc)).toEqual(["Swiggy", "Zomato (buffer)", "Amazon (buffer)", "Tax convenience", "Bad date"]);
     });
 
     it("should fallback to most common year when period is null or has no year", () => {
       const result = filterTransactionsByPeriod(transactions, null);
       // Finds 2026 as the most common year among transactions (3 vs 1 vs 1) and filters by it
-      expect(result.length).toBe(3);
-      expect(result.map(t => t.desc)).toEqual(["Swiggy", "Zomato (buffer)", "Amazon (buffer)"]);
+      expect(result.length).toBe(5);
+      expect(result.map(t => t.desc)).toEqual(["Swiggy", "Zomato (buffer)", "Amazon (buffer)", "Tax convenience", "Bad date"]);
     });
   });
 });

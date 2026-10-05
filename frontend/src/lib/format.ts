@@ -48,6 +48,7 @@ export function parseStatementDate(raw: string): Date | null {
   if (!raw || typeof raw !== "string") return null;
   const parts = raw.trim().split(/[-/]/);
   if (parts.length !== 3) return null;
+  if (parts.some(p => !/^\d+$/.test(p))) return null;
 
   let year: number, month: number, day: number;
   if (parts[0].length === 4) {
@@ -67,6 +68,12 @@ export function parseStatementDate(raw: string): Date | null {
 /** The day-of-month key used to bucket the daily spend series. Defaults to 1. */
 export function dayOfMonth(raw: string): number {
   return parseStatementDate(raw)?.getDate() ?? 1;
+}
+
+export function calendarDateKey(raw: string): string | null {
+  const date = parseStatementDate(raw);
+  if (!date) return null;
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
 export function formatDate(raw: string): string {

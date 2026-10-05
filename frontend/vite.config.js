@@ -4,8 +4,9 @@ import tailwindcss from '@tailwindcss/vite'
 import { fileURLToPath, URL } from 'node:url'
 
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [react(), tailwindcss()],
+  ...(mode === 'test' ? { esbuild: { jsx: 'automatic' } } : {}),
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
@@ -25,4 +26,4 @@ export default defineConfig({
     setupFiles: './src/tests/setup.ts',
     css: true,
   },
-})
+}))

@@ -1,5 +1,6 @@
 /** A transaction after normalisation. Every field is guaranteed present. */
 export type Transaction = {
+  sourceIndex?: number;
   date: string;
   desc: string;
   amount: number;
@@ -27,6 +28,8 @@ export type Insight = {
 
 /** An analysis as held in App state. */
 export type Analysis = {
+  session_only?: boolean;
+  quality?: { warnings?: string[]; reconciliation?: { status: string; differenceMinor: number | null; reasons?: string[] } };
   id?: string;
   period?: string;
   bank?: string;

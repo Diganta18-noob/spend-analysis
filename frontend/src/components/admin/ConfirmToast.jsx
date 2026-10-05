@@ -1,7 +1,13 @@
-import React, { useEffect } from "react";
-import { AlertTriangle, Trash2, X } from "lucide-react";
+import { useEffect } from "react";
+import { AlertTriangle, Trash2 } from "lucide-react";
 
-export default function ConfirmToast({ show, message, subMessage, onConfirm, onCancel }) {
+export default function ConfirmToast({
+  show,
+  message,
+  subMessage,
+  onConfirm,
+  onCancel,
+}) {
   useEffect(() => {
     if (show) {
       const timer = setTimeout(() => {
@@ -14,24 +20,26 @@ export default function ConfirmToast({ show, message, subMessage, onConfirm, onC
   if (!show) return null;
 
   return (
-    <div style={{
-      position: "fixed",
-      bottom: "30px",
-      left: "50%",
-      transform: "translateX(-50%)",
-      background: "rgba(15, 15, 30, 0.95)",
-      backdropFilter: "blur(12px)",
-      border: "1px solid #ef4444",
-      borderRadius: "12px",
-      padding: "16px 20px",
-      boxShadow: "0 10px 40px rgba(0,0,0,0.5), 0 0 20px rgba(239,68,68,0.15)",
-      zIndex: 9999,
-      display: "flex",
-      flexDirection: "column",
-      gap: "12px",
-      minWidth: "320px",
-      animation: "slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1)"
-    }}>
+    <div
+      style={{
+        position: "fixed",
+        bottom: "30px",
+        left: "50%",
+        transform: "translateX(-50%)",
+        background: "rgba(15, 15, 30, 0.95)",
+        backdropFilter: "blur(12px)",
+        border: "1px solid #ef4444",
+        borderRadius: "12px",
+        padding: "16px 20px",
+        boxShadow: "0 10px 40px rgba(0,0,0,0.5), 0 0 20px rgba(239,68,68,0.15)",
+        zIndex: 9999,
+        display: "flex",
+        flexDirection: "column",
+        gap: "12px",
+        minWidth: "320px",
+        animation: "slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1)",
+      }}
+    >
       <style>{`
         @keyframes slideUp {
           from { transform: translate(-50%, 20px); opacity: 0; }
@@ -67,17 +75,26 @@ export default function ConfirmToast({ show, message, subMessage, onConfirm, onC
           background: #2a2a4a;
         }
       `}</style>
-      
+
       <div style={{ display: "flex", gap: "12px", alignItems: "flex-start" }}>
         <div style={{ color: "#ef4444", marginTop: "2px" }}>
           <AlertTriangle size={20} />
         </div>
         <div style={{ flex: 1 }}>
-          <div style={{ color: "#f8fafc", fontSize: "14px", fontWeight: "500", lineHeight: "1.4" }}>
+          <div
+            style={{
+              color: "#f8fafc",
+              fontSize: "14px",
+              fontWeight: "500",
+              lineHeight: "1.4",
+            }}
+          >
             {message}
           </div>
           {subMessage && (
-            <div style={{ color: "#94a3b8", fontSize: "12px", marginTop: "4px" }}>
+            <div
+              style={{ color: "#94a3b8", fontSize: "12px", marginTop: "4px" }}
+            >
               {subMessage}
             </div>
           )}
@@ -85,7 +102,10 @@ export default function ConfirmToast({ show, message, subMessage, onConfirm, onC
       </div>
 
       <div style={{ display: "flex", gap: "10px", marginTop: "4px" }}>
-        <button className="confirm-btn confirm-btn-secondary" onClick={onCancel}>
+        <button
+          className="confirm-btn confirm-btn-secondary"
+          onClick={onCancel}
+        >
           Cancel
         </button>
         <button className="confirm-btn confirm-btn-danger" onClick={onConfirm}>

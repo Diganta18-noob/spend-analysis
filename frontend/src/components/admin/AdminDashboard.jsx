@@ -1,427 +1,234 @@
-import React, { useEffect, useState } from "react";
-import { fetchAnalyses, fetchStats, deleteAnalysis, fetchAnalysis, updateAnalysis, logCsvExport } from "../../services/apiService";
-import { Database, FileText, IndianRupee, Activity, LogOut, Trash2, Eye, Settings, Download, ScrollText, BarChart3 } from "lucide-react";
-import AdminSettingsModal from "./AdminSettingsModal";
-import ConfirmToast from "./ConfirmToast";
+import { useState, useCallback } from "react";
+import { LogOut, Settings, ArrowLeft } from "lucide-react";
+import PortalShell from "../layout/PortalShell";
+import { Button, InlineError, ConfirmDialog, Tabs } from "../ui/PortalUI";
 import ExpenseManager from "../ExpenseManager";
-import AuditLogTab from "./AuditLogTab";
+import AdminOverview from "./AdminOverview";
+import AnalysisTable from "./AnalysisTable";
+import AnalysisDetailDrawer from "./AnalysisDetailDrawer";
+import AdminSettingsModal from "./AdminSettingsModal";
 import ApiUsageTab from "./ApiUsageTab";
-
-export default function AdminDashboard() {
-  const [analyses, setAnalyses] = useState([]);
-  const [stats, setStats] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [showSettings, setShowSettings] = useState(false);
-  const [deletingId, setDeletingId] = useState(null);
-  const [viewingAnalysisData, setViewingAnalysisData] = useState(null);
-  const [activeTab, setActiveTab] = useState("analyses");
-  const [loadingAnalysis, setLoadingAnalysis] = useState(false);
-
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
+import AuditLogTab from "./AuditLogTab";
+import {
+  fetchAnalyses,
+  fetchAnalysis,
+  deleteAnalysis,
+  exportAnalyses,
+} from "../../services/apiService";
+import { useResource } from "../../hooks/useResource";
+import { useAnalysisPersistence } from "../../hooks/useAnalysisPersistence";
+const defaults = {
+  query: "",
+  bank: "",
+  from: "",
+  to: "",
+  limit: 25,
+  offset: 0,
+};
+export default function AdminDashboard({ theme, toggleTheme }) {
+  const [view, setView] = useState("overview");
+  const [filters, setFilters] = useState(defaults);
+  const [settings, setSettings] = useState(false);
+  const [deleting, setDeleting] = useState(null);
+  const [pending, setPending] = useState(false);
+  const [actionError, setActionError] = useState("");
+  const [detailId, setDetailId] = useState(null);
+  const [fullData, setFullData] = useState(null);
+  const [fullView, setFullView] = useState("overview");
+  const persistence = useAnalysisPersistence({
+    analysis: fullData,
+    onChange: setFullData,
+    admin: true,
+  });
+  const list = useResource(
+    () =>
+      fetchAnalyses({
+        ...filters,
+        ...(view === "quality" ? { quality: "review" } : {}),
+      }),
+    [filters, view],
+  );
+  const detail = useResource(
+    () =>
+      detailId
+        ? fetchAnalysis(detailId, { admin: true })
+        : Promise.resolve(null),
+    [detailId],
+  );
+  const closeDetail = useCallback(() => setDetailId(null), []);
+  const navigate = (next) => {
+    setView(next);
+    setFullData(null);
+    setFilters((previous) => ({ ...previous, offset: 0 }));
+    setActionError("");
+  };
+  async function remove() {
+    setPending(true);
+    setActionError("");
     try {
-      const [analysesData, statsData] = await Promise.all([
-        fetchAnalyses(),
-        fetchStats()
-      ]);
-      setAnalyses(analysesData);
-      setStats(statsData);
-    } catch (err) {
-      if (err.message === "Unauthorized") {
-        sessionStorage.removeItem("admin_token");
-        window.location.hash = "#/admin/login";
-      }
-      console.error(err);
+      await deleteAnalysis(deleting.id);
+      setDeleting(null);
+      if (list.data?.items.length === 1 && filters.offset)
+        setFilters((previous) => ({
+          ...previous,
+          offset: Math.max(0, previous.offset - previous.limit),
+        }));
+      else list.refresh();
+    } catch (error) {
+      setActionError(error.message);
     } finally {
-      setLoading(false);
+      setPending(false);
     }
-  };
-
-  const confirmDelete = async () => {
-    if (!deletingId) return;
+  }
+  async function download() {
+    setPending(true);
+    setActionError("");
     try {
-      await deleteAnalysis(deletingId);
-      loadData(); // Reload
-      setDeletingId(null);
-    } catch (err) {
-      alert("Failed to delete");
+      const blob = await exportAnalyses({
+        ...filters,
+        ...(view === "quality" ? { quality: "review" } : {}),
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "spend-analyses.csv";
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) {
+      setActionError(error.message);
+    } finally {
+      setPending(false);
     }
-  };
-
-  const handleExportCSV = async () => {
-    if (analyses.length === 0) return;
-    
-    const headers = ["Date", "Time", "Period", "Bank", "Account Holder", "Transactions", "Total Spent"];
-    const rows = analyses.map(a => [
-      new Date(a.created_at).toLocaleDateString(),
-      new Date(a.created_at).toLocaleTimeString(),
-      `"${a.period}"`,
-      `"${a.bank || ''}"`,
-      `"${a.account_holder || ''}"`,
-      a.transaction_count,
-      a.total_spent
-    ]);
-    
-    const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `expense_analyses_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    try { await logCsvExport(); } catch(e) { /* silent */ }
-  };
-
-  const handleLogout = () => {
+  }
+  const logout = () => {
     sessionStorage.removeItem("admin_token");
-    window.location.hash = "#/";
+    window.location.hash = "#/admin/login";
   };
-
-  const handleViewAnalysis = async (id) => {
-    try {
-      setLoadingAnalysis(true);
-      const data = await fetchAnalysis(id);
-      setViewingAnalysisData(data);
-    } catch (err) {
-      alert("Failed to load analysis details");
-    } finally {
-      setLoadingAnalysis(false);
-    }
-  };
-
-  const handleUpdateTransaction = async (idx, field, val) => {
-    if (!viewingAnalysisData) return;
-    const updatedData = { ...viewingAnalysisData };
-    if (!updatedData.transactions) return;
-    updatedData.transactions[idx][field] = val;
-    setViewingAnalysisData(updatedData);
-    try {
-      await updateAnalysis(updatedData.id, updatedData);
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  const handleBatchUpdateCategory = async (desc, newCat) => {
-    if (!viewingAnalysisData) return;
-    const updatedData = { ...viewingAnalysisData };
-    if (!updatedData.transactions) return;
-    updatedData.transactions.forEach((t) => {
-      if (t.desc === desc) t.cat = newCat;
-    });
-    setViewingAnalysisData(updatedData);
-    try {
-      await updateAnalysis(updatedData.id, updatedData);
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  const fmt = (num) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(num || 0);
-
-  if (loading) {
-    return (
-      <div style={{ minHeight: "100vh", background: "#020617", color: "#f8fafc", fontFamily: "'Inter', sans-serif" }}>
-        {/* Header */}
-        <header style={{ 
-          background: "rgba(15, 23, 42, 0.8)", backdropFilter: "blur(12px)", 
-          borderBottom: "1px solid rgba(255,255,255,0.05)", padding: "16px 32px",
-          display: "flex", justifyContent: "space-between", alignItems: "center",
-          position: "sticky", top: 0, zIndex: 10
-        }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            <div style={{ background: "#fbbf24", color: "#000", padding: "6px", borderRadius: "8px" }}>
-              <Database size={20} />
-            </div>
-            <h2 style={{ margin: 0, fontSize: "18px", fontWeight: "600" }}>Admin Portal</h2>
-          </div>
-          <div style={{ display: "flex", gap: "16px", alignItems: "center" }}>
-            <div className="shimmer" style={{ width: "80px", height: "16px", borderRadius: "4px" }}></div>
-            <div style={{ width: "1px", height: "16px", background: "rgba(255,255,255,0.1)" }}></div>
-            <div className="shimmer" style={{ width: "80px", height: "32px", borderRadius: "6px" }}></div>
-          </div>
-        </header>
-
-        <main style={{ padding: "32px", maxWidth: "1200px", margin: "0 auto" }}>
-          {/* Stats Row */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "20px", marginBottom: "24px" }}>
-            <StatCardSkeleton />
-            <StatCardSkeleton />
-            <StatCardSkeleton />
-            <StatCardSkeleton />
-          </div>
-
-          {/* Tab Navigation */}
-          <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
-            <div className="shimmer" style={{ width: "100px", height: "32px", borderRadius: "8px" }}></div>
-            <div className="shimmer" style={{ width: "100px", height: "32px", borderRadius: "8px" }}></div>
-            <div className="shimmer" style={{ width: "100px", height: "32px", borderRadius: "8px" }}></div>
-          </div>
-
-          {/* Table Container */}
-          <div style={{ background: "#0f172a", borderRadius: "16px", border: "1px solid rgba(255,255,255,0.05)", overflow: "hidden" }}>
-            <div style={{ padding: "20px", borderBottom: "1px solid rgba(255,255,255,0.05)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div className="shimmer" style={{ height: "18px", width: "150px", borderRadius: "4px" }}></div>
-              <div className="shimmer" style={{ height: "32px", width: "100px", borderRadius: "6px" }}></div>
-            </div>
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "14px" }}>
-                <thead>
-                  <tr style={{ background: "rgba(0,0,0,0.2)", color: "#94a3b8" }}>
-                    <th style={{ padding: "12px 20px", fontWeight: "500" }}>Date</th>
-                    <th style={{ padding: "12px 20px", fontWeight: "500" }}>Time</th>
-                    <th style={{ padding: "12px 20px", fontWeight: "500" }}>Period</th>
-                    <th style={{ padding: "12px 20px", fontWeight: "500" }}>Account Holder</th>
-                    <th style={{ padding: "12px 20px", fontWeight: "500" }}>Transactions</th>
-                    <th style={{ padding: "12px 20px", fontWeight: "500", textAlign: "right" }}>Total Spent</th>
-                    <th style={{ padding: "12px 20px", fontWeight: "500", textAlign: "center" }}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <TableRowSkeleton />
-                  <TableRowSkeleton />
-                  <TableRowSkeleton />
-                  <TableRowSkeleton />
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </main>
-      </div>
-    );
-  }
-
-  if (loadingAnalysis) {
-    return (
-      <div style={{
-        minHeight: "100vh", background: "#020617", color: "#f8fafc", fontFamily: "'Inter', sans-serif",
-        display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", gap: "24px"
-      }}>
-        <div className="spin-loader"></div>
-        <div className="pulse-text" style={{ fontSize: "16px", color: "#94a3b8", fontWeight: "500" }}>
-          Opening Statement Analysis...
-        </div>
-      </div>
-    );
-  }
-
-
-  if (viewingAnalysisData) {
-    return (
-      <ExpenseManager 
-        data={viewingAnalysisData} 
-        onBack={() => setViewingAnalysisData(null)} 
-        backLabel="Back to Admin"
-        onUpdateTransaction={handleUpdateTransaction}
-        onBatchUpdateCategory={handleBatchUpdateCategory}
-      />
-    );
-  }
-
   return (
-    <div style={{ minHeight: "100vh", background: "#020617", color: "#f8fafc", fontFamily: "'Inter', sans-serif" }}>
-      {/* Header */}
-      <header style={{ 
-        background: "rgba(15, 23, 42, 0.8)", backdropFilter: "blur(12px)", 
-        borderBottom: "1px solid rgba(255,255,255,0.05)", padding: "16px 32px",
-        display: "flex", justifyContent: "space-between", alignItems: "center",
-        position: "sticky", top: 0, zIndex: 10
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <div style={{ background: "#fbbf24", color: "#000", padding: "6px", borderRadius: "8px" }}>
-            <Database size={20} />
+    <PortalShell
+      portal="admin"
+      activeView={view}
+      onNavigate={navigate}
+      theme={theme}
+      onToggleTheme={toggleTheme}
+      actions={
+        <>
+          <Button
+            onClick={() => setSettings(true)}
+            aria-label="Account settings"
+          >
+            <Settings size={16} />
+          </Button>
+          <Button onClick={logout}>
+            <LogOut size={14} />
+            Sign out
+          </Button>
+        </>
+      }
+    >
+      {fullData ? (
+        <>
+          <div className="p-heading-actions" style={{ marginBottom: 22 }}>
+            <Button
+              onClick={() => {
+                setFullData(null);
+                list.refresh();
+              }}
+            >
+              <ArrowLeft size={14} />
+              Back to analyses
+            </Button>
+            <Tabs
+              value={fullView}
+              onChange={setFullView}
+              items={[
+                "overview",
+                "transactions",
+                "vendors",
+                "insights",
+                "rewards",
+              ].map((value) => ({
+                value,
+                label: value[0].toUpperCase() + value.slice(1),
+              }))}
+            />
           </div>
-          <h2 style={{ margin: 0, fontSize: "18px", fontWeight: "600" }}>Admin Portal</h2>
-        </div>
-        <div style={{ display: "flex", gap: "16px", alignItems: "center" }}>
-          <a href="#/" style={{ color: "#94a3b8", textDecoration: "none", fontSize: "14px", display: "flex", alignItems: "center", gap: "6px" }}>
-            Back to App
-          </a>
-          <div style={{ width: "1px", height: "16px", background: "rgba(255,255,255,0.1)" }}></div>
-          <button onClick={() => setShowSettings(true)} style={{ 
-            background: "transparent", border: "none", color: "#e2e8f0", 
-            cursor: "pointer", display: "flex", alignItems: "center", padding: "6px"
-          }} title="Settings">
-            <Settings size={18} />
-          </button>
-          <button onClick={handleLogout} style={{ 
-            background: "transparent", border: "1px solid rgba(255,255,255,0.1)", color: "#fca5a5", 
-            padding: "6px 12px", borderRadius: "6px", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px", fontSize: "13px"
-          }}>
-            <LogOut size={14} /> Logout
-          </button>
-        </div>
-      </header>
-
-      <main style={{ padding: "32px", maxWidth: "1200px", margin: "0 auto" }}>
-        {/* Stats Row */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "20px", marginBottom: "24px" }}>
-          <StatCard icon={<FileText />} title="Total Analyses" value={stats?.total_analyses || 0} />
-          <StatCard icon={<IndianRupee />} title="Total Spend Tracked" value={fmt(stats?.total_spend_tracked)} color="#34d399" />
-          <StatCard icon={<Activity />} title="Total Transactions" value={stats?.total_transactions || 0} color="#60a5fa" />
-          <StatCard icon={<Database />} title="Top Bank" value={stats?.top_bank || "N/A"} color="#a78bfa" />
-        </div>
-
-        {/* Tab Navigation */}
-        <div style={{ display: "flex", gap: 4, marginBottom: 20, background: "rgba(0,0,0,0.2)", padding: 4, borderRadius: 10, width: "fit-content" }}>
-          {[
-            { key: "analyses", label: "Analyses", icon: <FileText size={14} /> },
-            { key: "audit", label: "Audit Log", icon: <ScrollText size={14} /> },
-            { key: "api", label: "API Usage", icon: <BarChart3 size={14} /> },
-          ].map(tab => (
-            <button key={tab.key} onClick={() => setActiveTab(tab.key)} style={{
-              display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, border: "none", fontFamily: "inherit", fontSize: 13, fontWeight: 600, cursor: "pointer", transition: "all 0.15s",
-              background: activeTab === tab.key ? "rgba(251,191,36,0.1)" : "transparent",
-              color: activeTab === tab.key ? "#fbbf24" : "#64748b",
-            }}>{tab.icon} {tab.label}</button>
-          ))}
-        </div>
-
-        {/* Analyses Tab */}
-        {activeTab === "analyses" && (
-          <div style={{ background: "#0f172a", borderRadius: "16px", border: "1px solid rgba(255,255,255,0.05)", overflow: "hidden" }}>
-            <div style={{ padding: "20px", borderBottom: "1px solid rgba(255,255,255,0.05)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "600" }}>Stored Analyses</h3>
-              <button onClick={handleExportCSV} style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "#e2e8f0", padding: "6px 12px", borderRadius: "6px", fontSize: "13px", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}>
-                <Download size={14} /> Export CSV
-              </button>
+          <ExpenseManager
+            key={fullData.id}
+            data={persistence.analysis}
+            persistence={persistence}
+            view={fullView}
+            onNavigate={setFullView}
+            admin
+          />
+        </>
+      ) : view === "overview" ? (
+        <AdminOverview onNavigate={navigate} />
+      ) : view === "usage" ? (
+        <ApiUsageTab />
+      ) : view === "audit" ? (
+        <AuditLogTab />
+      ) : (
+        <>
+          <div className="p-page-heading">
+            <div>
+              <p className="p-eyebrow">
+                {view === "quality"
+                  ? "REVIEW WITH CONTEXT"
+                  : "THE STATEMENT LIBRARY"}
+              </p>
+              <h1>{view === "quality" ? "Quality review" : "Analyses"}</h1>
+              <p>
+                {view === "quality"
+                  ? "Stored analyses with extraction warnings or balance mismatches."
+                  : "Search, inspect, and manage saved statement analyses."}
+              </p>
             </div>
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "14px" }}>
-                <thead>
-                  <tr style={{ background: "rgba(0,0,0,0.2)", color: "#94a3b8" }}>
-                    <th style={{ padding: "12px 20px", fontWeight: "500" }}>Date</th>
-                    <th style={{ padding: "12px 20px", fontWeight: "500" }}>Time</th>
-                    <th style={{ padding: "12px 20px", fontWeight: "500" }}>Period</th>
-                    <th style={{ padding: "12px 20px", fontWeight: "500" }}>Account Holder</th>
-                    <th style={{ padding: "12px 20px", fontWeight: "500" }}>Transactions</th>
-                    <th style={{ padding: "12px 20px", fontWeight: "500", textAlign: "right" }}>Total Spent</th>
-                    <th style={{ padding: "12px 20px", fontWeight: "500", textAlign: "center" }}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {analyses.length === 0 ? (
-                    <tr><td colSpan={6} style={{ padding: "30px", textAlign: "center", color: "#64748b" }}>No analyses found.</td></tr>
-                  ) : analyses.map((a) => (
-                    <tr key={a.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.02)" }}>
-                      <td style={{ padding: "16px 20px", color: "#cbd5e1" }}>{new Date(a.created_at).toLocaleDateString()}</td>
-                      <td style={{ padding: "16px 20px", color: "#94a3b8", fontSize: "13px" }}>{new Date(a.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
-                      <td style={{ padding: "16px 20px", color: "#94a3b8", fontSize: "13px" }}>{a.period}</td>
-                      <td style={{ padding: "16px 20px" }}>
-                        <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                          <div style={{ color: "#f8fafc", fontWeight: 600, fontSize: "14px" }}>{a.account_holder && a.account_holder !== "REDACTED" ? a.account_holder : "Unknown"}</div>
-                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                            <span style={{ color: "#64748b", fontSize: "12px" }}>{a.bank || "—"}</span>
-                            {a.is_redacted && <span style={{ fontSize: 9, color: "#34d399", background: "rgba(52,211,153,0.1)", padding: "1px 6px", borderRadius: 10 }}>🔒 Redacted</span>}
-                          </div>
-                        </div>
-                      </td>
-                      <td style={{ padding: "16px 20px", color: "#94a3b8" }}>{a.transaction_count}</td>
-                      <td style={{ padding: "16px 20px", textAlign: "right", color: "#fca5a5", fontFamily: "DM Mono, monospace" }}>{fmt(a.total_spent)}</td>
-                      <td style={{ padding: "16px 20px", textAlign: "center" }}>
-                        <div style={{ display: "flex", justifyContent: "center", gap: "8px" }}>
-                          <button onClick={() => handleViewAnalysis(a.id)} style={{ background: "transparent", border: "1px solid #334155", color: "#e2e8f0", padding: "6px", borderRadius: "6px", cursor: "pointer" }} title="View Details"><Eye size={16} /></button>
-                          <button onClick={() => setDeletingId(a.id)} style={{ background: "transparent", border: "1px solid #7f1d1d", color: "#fca5a5", padding: "6px", borderRadius: "6px", cursor: "pointer" }} title="Delete"><Trash2 size={16} /></button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <span className="p-badge">
+              {list.data?.total ?? "—"} matching analyses
+            </span>
           </div>
-        )}
-
-        {/* Audit Log Tab */}
-        {activeTab === "audit" && (
-          <div style={{ background: "#0f172a", borderRadius: "16px", border: "1px solid rgba(255,255,255,0.05)", padding: 20 }}>
-            <h3 style={{ margin: "0 0 16px", fontSize: "16px", fontWeight: "600", display: "flex", alignItems: "center", gap: 8 }}><ScrollText size={18} color="#fbbf24" /> Audit Log</h3>
-            <AuditLogTab />
-          </div>
-        )}
-
-        {/* API Usage Tab */}
-        {activeTab === "api" && (
-          <div style={{ background: "#0f172a", borderRadius: "16px", border: "1px solid rgba(255,255,255,0.05)", padding: 20 }}>
-            <h3 style={{ margin: "0 0 16px", fontSize: "16px", fontWeight: "600", display: "flex", alignItems: "center", gap: 8 }}><BarChart3 size={18} color="#fbbf24" /> API Overview</h3>
-            <ApiUsageTab />
-          </div>
-        )}
-      </main>
-
-      {/* Modals & Toasts */}
-      {showSettings && <AdminSettingsModal onClose={() => setShowSettings(false)} />}
-      
-      <ConfirmToast 
-        show={!!deletingId} 
-        message="Are you sure you want to delete this analysis?" 
-        subMessage="This action cannot be undone."
-        onConfirm={confirmDelete} 
-        onCancel={() => setDeletingId(null)} 
-      />
-    </div>
+          <InlineError message={list.error} onRetry={list.refresh} />
+          <AnalysisTable
+            result={list.error ? null : list.data}
+            filters={filters}
+            onFiltersChange={setFilters}
+            onView={setDetailId}
+            onDelete={setDeleting}
+            onExport={download}
+            onRefresh={list.refresh}
+            loading={list.loading}
+            exporting={pending}
+          />
+        </>
+      )}
+      <InlineError message={actionError} />
+      {detailId && (
+        <AnalysisDetailDrawer
+          analysis={detail.data}
+          loading={detail.loading}
+          error={detail.error}
+          onRetry={detail.refresh}
+          onClose={closeDetail}
+          onOpenFull={() => {
+            setFullData(detail.data);
+            setFullView("overview");
+            setDetailId(null);
+          }}
+        />
+      )}
+      {deleting && (
+        <ConfirmDialog
+          title="Permanently delete this analysis?"
+          pending={pending}
+          onCancel={() => setDeleting(null)}
+          onConfirm={remove}
+        >
+          The saved statement and its extracted transactions will be removed.
+          This action is recorded in the audit trail.
+        </ConfirmDialog>
+      )}
+      {settings && <AdminSettingsModal onClose={() => setSettings(false)} />}
+    </PortalShell>
   );
 }
-
-function StatCard({ icon, title, value, color = "#fbbf24" }) {
-  return (
-    <div style={{ 
-      background: "#0f172a", border: "1px solid rgba(255,255,255,0.05)", borderRadius: "16px", 
-      padding: "20px", display: "flex", alignItems: "center", gap: "16px" 
-    }}>
-      <div style={{ 
-        width: "48px", height: "48px", borderRadius: "12px", background: `${color}15`, 
-        color: color, display: "flex", alignItems: "center", justifyContent: "center" 
-      }}>
-        {icon}
-      </div>
-      <div>
-        <div style={{ color: "#94a3b8", fontSize: "13px", marginBottom: "4px" }}>{title}</div>
-        <div style={{ color: "#fff", fontSize: "24px", fontWeight: "700" }}>{value}</div>
-      </div>
-    </div>
-  );
-}
-
-function StatCardSkeleton() {
-  return (
-    <div style={{ 
-      background: "#0f172a", border: "1px solid rgba(255,255,255,0.05)", borderRadius: "16px", 
-      padding: "20px", display: "flex", alignItems: "center", gap: "16px" 
-    }}>
-      <div className="shimmer" style={{ width: "48px", height: "48px", borderRadius: "12px" }}></div>
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "8px" }}>
-        <div className="shimmer" style={{ height: "12px", width: "80px", borderRadius: "4px" }}></div>
-        <div className="shimmer" style={{ height: "20px", width: "120px", borderRadius: "4px" }}></div>
-      </div>
-    </div>
-  );
-}
-
-function TableRowSkeleton() {
-  return (
-    <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.02)" }}>
-      <td style={{ padding: "16px 20px" }}><div className="shimmer" style={{ height: "14px", width: "80px", borderRadius: "4px" }}></div></td>
-      <td style={{ padding: "16px 20px" }}><div className="shimmer" style={{ height: "14px", width: "60px", borderRadius: "4px" }}></div></td>
-      <td style={{ padding: "16px 20px" }}><div className="shimmer" style={{ height: "14px", width: "100px", borderRadius: "4px" }}></div></td>
-      <td style={{ padding: "16px 20px" }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-          <div className="shimmer" style={{ height: "14px", width: "140px", borderRadius: "4px" }}></div>
-          <div className="shimmer" style={{ height: "10px", width: "70px", borderRadius: "4px" }}></div>
-        </div>
-      </td>
-      <td style={{ padding: "16px 20px" }}><div className="shimmer" style={{ height: "14px", width: "40px", borderRadius: "4px" }}></div></td>
-      <td style={{ padding: "16px 20px" }}><div className="shimmer" style={{ height: "14px", width: "80px", borderRadius: "4px", marginLeft: "auto" }}></div></td>
-      <td style={{ padding: "16px 20px" }}><div style={{ display: "flex", justifyContent: "center", gap: "8px" }}>
-        <div className="shimmer" style={{ height: "30px", width: "30px", borderRadius: "6px" }}></div>
-        <div className="shimmer" style={{ height: "30px", width: "30px", borderRadius: "6px" }}></div>
-      </div></td>
-    </tr>
-  );
-}
-

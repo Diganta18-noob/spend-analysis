@@ -53,7 +53,7 @@ describe("validate middleware", () => {
     it("should pass with valid passwords", () => {
       const { req, res, next, wasNextCalled } = mockExpress({
         currentPassword: "old",
-        newPassword: "newpass",
+        newPassword: "newpass-strong-123",
       });
       mw(req, res, next);
       expect(wasNextCalled()).toBe(true);

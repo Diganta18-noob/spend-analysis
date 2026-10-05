@@ -1,6 +1,6 @@
 import jwt from "jsonwebtoken";
 
-const JWT_SECRET = process.env.JWT_SECRET || "default_jwt_secret_change_me_123";
+import { getJwtSecret } from '../config.js';
 
 /**
  * Middleware that verifies a JWT in the Authorization header.
@@ -15,13 +15,14 @@ export function requireAdmin(req, res, next) {
 
   const token = authHeader.split(" ")[1];
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, getJwtSecret(), { algorithms: ['HS256'] });
+    if (decoded.username !== 'admin') throw new Error('Invalid admin identity');
     req.admin = decoded;
 
     // Refresh on activity: generate a new token with fresh 30m TTL
     const refreshedToken = jwt.sign(
       { username: decoded.username },
-      JWT_SECRET,
+      getJwtSecret(),
       { expiresIn: "30m" }
     );
     res.setHeader("X-Refreshed-Token", refreshedToken);
@@ -73,6 +74,7 @@ export async function requireUserAuth(req, res, next) {
     publicKey = publicKey.replace(/\\n/g, "\n");
 
     const decoded = jwt.verify(token, publicKey, { algorithms: ["RS256"] });
+    if (!decoded.sub) throw new Error('Missing user identity');
     const email = decoded.email || decoded.email_address || "";
 
     req.user = {
@@ -94,10 +96,8 @@ export async function requireUserAuth(req, res, next) {
  */
 export async function optionalUserAuth(req, res, next) {
   const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    req.user = null;
-    return next();
-  }
+  if (!authHeader) { req.user = null; return next(); }
+  if (!authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Invalid authorization header' });
 
   const token = authHeader.split(" ")[1];
   const clerkPublicKey = process.env.CLERK_JWT_KEY;
@@ -106,20 +106,20 @@ export async function optionalUserAuth(req, res, next) {
     if (process.env.NODE_ENV === "test") {
       try {
         const decoded = jwt.decode(token);
-        if (decoded) {
+        if (decoded && (decoded.sub || decoded.id)) {
           req.user = {
             id: decoded.sub || decoded.id || "test-user-id",
             email: decoded.email || "test@example.com"
           };
           await upsertUser(req.user.id, req.user.email);
         }
+        if (!req.user) return res.status(401).json({ error: 'Invalid user token' });
         return next();
       } catch (err) {
         // Ignore decoding errors for optional auth
       }
     }
-    req.user = null;
-    return next();
+    return res.status(500).json({ error: 'User authentication is not configured' });
   }
 
   try {
@@ -132,6 +132,7 @@ export async function optionalUserAuth(req, res, next) {
     const decoded = jwt.verify(token, publicKey, { algorithms: ["RS256"] });
     const email = decoded.email || decoded.email_address || "";
 
+    if (!decoded.sub) throw new Error('Missing user identity');
     req.user = {
       id: decoded.sub,
       email: email
@@ -139,7 +140,7 @@ export async function optionalUserAuth(req, res, next) {
 
     await upsertUser(req.user.id, req.user.email);
   } catch (err) {
-    req.user = null;
+    return res.status(401).json({ error: 'Invalid or expired user session' });
   }
   next();
 }
