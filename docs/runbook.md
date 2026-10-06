@@ -307,3 +307,11 @@ git diff --staged
 - Account-holder metadata remains in existing database storage for administrators. PII redaction does not establish full anonymization; consult `project-improvements.md` for retention/privacy work.
 
 Run backend `npm test`, and frontend `npm test`, `npm run build`, `npm run typecheck`, `npm run lint`. Backend's lint script remains a placeholder. See `portal-validation.md` for live-service verification limits. Never commit credentials or real financial fixtures.
+
+### New admin UI shows no data after frontend deployment
+
+The new admin list contract is `{items,total,limit,offset}`. An older Render backend returns a plain array; this is a deployment mismatch, not evidence that saved records were deleted. The frontend now reports incompatible responses explicitly rather than interpreting them as zero results.
+
+In Render, open the backend service and deploy its latest `main` commit. Check deployment logs if it stays on the previous version. Verify required `JWT_SECRET` (at least 32 characters), the existing `MONGODB_URI`, and any required Clerk/AI configuration. Preserve the database URI and stored administrator account. `ADMIN_PASSWORD` is required only when bootstrapping an absent admin and must be at least 12 characters.
+
+Verify `/api/health` returns 200 with `message` and `timestamp`. The legacy `/health` response containing only `status` and `uptime`, together with `/api/health` returning 404, identifies the old server. After successful deployment, refresh/sign in to the admin UI. Anonymous results in the new application are session-only; they are separate from existing saved records.

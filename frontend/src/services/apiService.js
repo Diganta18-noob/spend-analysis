@@ -14,14 +14,21 @@ async function request(path, options = {}, credentials = { admin: true }) {
   return response;
 }
 const json = async (...args) => (await request(...args)).json();
+async function paginated(path) {
+  const result = await json(path);
+  if (!result || !Array.isArray(result.items) || !Number.isInteger(result.total) || result.total < 0) {
+    throw new Error('The backend API is outdated or returned an invalid list response. Deploy the latest main commit on Render, then refresh. Saved data could not be loaded.');
+  }
+  return result;
+}
 export const adminLogin = password => json('/admin/login', { method: 'POST', body: JSON.stringify({ password }) }, {});
 export const adminChangePassword = (currentPassword, newPassword) => json('/admin/change-password', { method: 'POST', body: JSON.stringify({ currentPassword, newPassword }) });
-export const fetchAnalyses = (filters = {}) => json(`/analyses?${queryString(filters)}`);
+export const fetchAnalyses = (filters = {}) => paginated(`/analyses?${queryString(filters)}`);
 export const fetchStats = () => json('/stats');
 export const fetchAnalysis = (id, credentials = {}) => json(`/analyses/${encodeURIComponent(id)}`, {}, credentials);
 export const updateAnalysis = (id, changes, credentials = {}) => json(`/analyses/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(changes) }, credentials);
 export const deleteAnalysis = id => json(`/analyses/${encodeURIComponent(id)}`, { method: 'DELETE' });
-export const fetchAuditLogs = (filters = {}) => json(`/admin/audit-logs?${queryString(filters)}`);
+export const fetchAuditLogs = (filters = {}) => paginated(`/admin/audit-logs?${queryString(filters)}`);
 export const fetchApiUsage = () => json('/admin/api-usage');
 export const logCsvExport = () => json('/admin/log-export', { method: 'POST' });
 export const exportAnalyses = async filters => (await request(`/admin/export?${queryString(filters)}`)).blob();
