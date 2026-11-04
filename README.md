@@ -303,7 +303,7 @@ VITE_API_URL=https://your-backend.onrender.com
 2. Set the root directory to `backend/`
 3. Build command: `npm install`
 4. Start command: `npm start`
-5. Add environment variables: `GEMINI_API_KEY`, `MONGODB_URI`, `ADMIN_PASSWORD`
+5. Add environment variables: `GEMINI_API_KEY`, `MONGODB_URI`, `ADMIN_PASSWORD`, and `JWT_SECRET`. Set `JWT_SECRET` to a unique random value of at least 32 characters and keep it stable across deploys. Changing it invalidates existing sign-in tokens.
 
 <br>
 
