@@ -6,18 +6,9 @@ import {
   YAxis,
   Tooltip,
   ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
   CartesianGrid,
 } from "recharts";
-import {
-  ArrowDownLeft,
-  ArrowUpRight,
-  ReceiptText,
-  CalendarDays,
-  ChevronRight,
-} from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { Card, StatCard, Button, EmptyState } from "../components/ui/PortalUI";
 import {
   totalSpent,
@@ -31,7 +22,6 @@ import {
   formatCompactCurrency,
   formatDate,
 } from "../lib/format";
-import { categoryColor } from "../lib/categories";
 export default function OverviewView({ transactions, onNavigate }) {
   const [selectedDay, setSelectedDay] = useState(null);
   const debits = transactions.filter((t) => t.amount > 0);
@@ -56,21 +46,18 @@ export default function OverviewView({ transactions, onNavigate }) {
         <StatCard
           label="Net spending"
           value={formatCurrency(totalSpent(transactions))}
-          detail="Debits less refunds · current selection"
-          icon={ArrowUpRight}
+          detail="Debits less refunds"
           featured
         />
         <StatCard
           label="Total debits"
           value={formatCurrency(totalSpent(debits))}
           detail={`${debits.length} outgoing transactions`}
-          icon={ReceiptText}
         />
         <StatCard
           label="Refunds"
           value={formatCurrency(refunds)}
           detail="Returned to your account"
-          icon={ArrowDownLeft}
         />
         <StatCard
           label="Peak spending day"
@@ -78,14 +65,13 @@ export default function OverviewView({ transactions, onNavigate }) {
           detail={
             peak ? formatCurrency(peak.amount) : "No valid dates available"
           }
-          icon={CalendarDays}
         />
       </div>
       <div className="p-chart-grid">
         <Card
-          title="Your spending, day by day"
-          subtitle="Net spending across the statement · select a day to explore"
-          action={<span className="p-badge">INR</span>}
+          title="Daily spending"
+          subtitle="Select a day to see its categories"
+          action={<span className="p-chart-unit">INR</span>}
         >
           {days.length ? (
             <div className="p-chart">
@@ -105,14 +91,14 @@ export default function OverviewView({ transactions, onNavigate }) {
                   <XAxis
                     dataKey="day"
                     tickFormatter={formatDate}
-                    tick={{ fill: "var(--text-muted)", fontSize: 9 }}
+                    tick={{ fill: "var(--text-muted)", fontSize: 11 }}
                     axisLine={false}
                     tickLine={false}
                     minTickGap={22}
                   />
                   <YAxis
                     tickFormatter={formatCompactCurrency}
-                    tick={{ fill: "var(--text-muted)", fontSize: 9 }}
+                    tick={{ fill: "var(--text-muted)", fontSize: 11 }}
                     axisLine={false}
                     tickLine={false}
                     width={55}
@@ -126,9 +112,10 @@ export default function OverviewView({ transactions, onNavigate }) {
                   <Bar
                     dataKey="amount"
                     name="Net spending"
-                    fill="var(--info)"
-                    radius={[4, 4, 0, 0]}
-                    maxBarSize={30}
+                    fill="var(--accent)"
+                    fillOpacity={0.82}
+                    radius={[3, 3, 0, 0]}
+                    maxBarSize={24}
                   />
                 </BarChart>
               </ResponsiveContainer>
@@ -155,48 +142,21 @@ export default function OverviewView({ transactions, onNavigate }) {
           )}
         </Card>
         <Card
-          title="Where your money goes"
-          subtitle="Gross debit spending by category"
+          title="Spending by category"
+          subtitle="Share of total debits"
         >
           {categories.length ? (
             <>
-              <div className="p-chart" style={{ height: 195 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={categories}
-                      dataKey="value"
-                      nameKey="name"
-                      innerRadius={57}
-                      outerRadius={79}
-                      paddingAngle={3}
-                      stroke="none"
-                    >
-                      {categories.map((category) => (
-                        <Cell
-                          key={category.name}
-                          fill={categoryColor(category.name)}
-                        />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      formatter={formatCurrency}
-                      contentStyle={tooltipStyle}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="p-card-body">
+              <div className="p-card-body p-category-list">
                 {categories.slice(0, 5).map((category) => (
-                  <div className="p-category-row" key={category.name}>
-                    <span className="p-category-name">
-                      <span
-                        className="p-category-dot"
-                        style={{ background: categoryColor(category.name) }}
-                      />
-                      {category.name}
-                    </span>
-                    <strong>{formatCurrency(category.value)}</strong>
+                  <div className="p-category-item" key={category.name}>
+                    <div className="p-category-row">
+                      <span>{category.name}</span>
+                      <strong>{formatCurrency(category.value)}</strong>
+                    </div>
+                    <div className="p-category-track" aria-hidden="true">
+                      <span style={{ width: `${Math.max(2, category.value / categories[0].value * 100)}%` }} />
+                    </div>
                   </div>
                 ))}
               </div>

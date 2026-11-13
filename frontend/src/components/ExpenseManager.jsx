@@ -35,10 +35,10 @@ export default function ExpenseManager({
   return (
     <div className="p-entry">
       {view === "overview" && (
-        <div className="p-page-heading">
+        <div className="p-page-heading p-overview-heading">
           <div>
-            <p className="p-eyebrow">YOUR FINANCIAL SNAPSHOT</p>
-            <h1>Every rupee, a clearer picture.</h1>
+            <p className="p-eyebrow">Statement overview</p>
+            <h1>Where your money went</h1>
             <p>
               {data.bank || "Statement overview"}{" "}
               <span style={{ margin: "0 7px" }}>·</span>
@@ -59,10 +59,7 @@ export default function ExpenseManager({
           </div>
         </div>
       )}
-      <div
-        className="p-heading-actions"
-        style={{ justifyContent: "space-between", marginBottom: 18 }}
-      >
+      <div className="p-heading-actions p-overview-meta">
         <span className="p-meta">
           {data.id === "sample"
             ? "Sample statement · demonstration data"
