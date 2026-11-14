@@ -28,6 +28,7 @@ export function analysisFilter({ query, bank, from, to, quality } = {}) {
       {
         $or: [
           { "data.quality.reconciliation.status": "mismatch" },
+          { "data.quality.reconciliation.status": "review" },
           { "data.quality.warnings.0": { $exists: true } },
         ],
       },
@@ -37,12 +38,17 @@ export function analysisFilter({ query, bank, from, to, quality } = {}) {
 
 export function applyCategoryEdits(data, edits) {
   const transactions = [...(data.transactions || [])];
-  for (const { index, cat } of edits) {
+  for (const { index, cat, credit_type } of edits) {
     if (!Number.isInteger(index) || index < 0 || index >= transactions.length)
       throw Object.assign(new Error("Transaction no longer exists"), {
         status: 422,
       });
-    transactions[index] = { ...transactions[index], cat };
+    if (credit_type !== undefined && transactions[index].amount >= 0)
+      throw Object.assign(new Error("Only credits have a credit purpose"), { status: 422 });
+    transactions[index] = { ...transactions[index], ...(cat === undefined ? {} : { cat }), ...(credit_type === undefined ? {} : { credit_type }) };
   }
-  return { ...data, transactions };
+  const quality = edits.some((e) => e.credit_type !== undefined)
+    ? { ...data.quality, reconciliation: { status: "review", differenceMinor: null, reasons: ["Credit purpose was edited; source balances must be checked again"] } }
+    : data.quality;
+  return { ...data, transactions, quality };
 }

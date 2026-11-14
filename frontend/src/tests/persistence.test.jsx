@@ -25,6 +25,15 @@ describe('explicit saves', () => {
     expect(updateAnalysis).not.toHaveBeenCalled();
     expect(result.current.saveState).toBe('local');
   });
+  it('saves a corrected credit purpose', async () => {
+    updateAnalysis.mockReset().mockResolvedValue({ success: true });
+    const onChange = vi.fn();
+    const creditAnalysis = { id: 'credit', transactions: [{ amount: -50, credit_type: 'unknown', cat: 'Other' }] };
+    const { result } = renderHook(() => useAnalysisPersistence({ analysis: creditAnalysis, onChange, getToken: async () => 'token' }));
+    act(() => result.current.editCreditType(0, 'income'));
+    await waitFor(() => expect(result.current.saveState).toBe('saved'));
+    expect(updateAnalysis).toHaveBeenCalledWith('credit', { edits: [{ index: 0, credit_type: 'income' }] }, { userToken: 'token' });
+  });
   it('retains the saved category when an older fetched record is reopened during a save', async () => {
     let resolve;
     updateAnalysis.mockReset().mockImplementation(() => new Promise(done => { resolve = done; }));

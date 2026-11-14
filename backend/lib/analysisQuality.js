@@ -1,3 +1,5 @@
+import { parsePeriod } from "./dateFilter.js";
+
 const categories = new Set([
   "Rent",
   "Insurance",
@@ -14,6 +16,7 @@ const categories = new Set([
   "Education",
   "Other",
 ]);
+const creditTypes = new Set(["refund", "adjustment", "income", "transfer", "card_payment", "other", "unknown"]);
 export function calendarKey(raw) {
   if (typeof raw !== "string") return null;
   const parts = raw.trim().split(/[-/]/);
@@ -50,8 +53,13 @@ export function normalizeExtractedTransactions(rows, provenance = {}) {
       warnings.push(
         `Page ${provenance.page || 1}, row ${index + 1}: date needs review`,
       );
+    const creditType = row.amount < 0 && creditTypes.has(row.credit_type) ? row.credit_type : row.amount < 0 ? "unknown" : null;
+    if (creditType === "unknown") warnings.push(`Page ${provenance.page || 1}, row ${index + 1}: credit purpose needs review`);
+    if (row.uncertain) warnings.push(`Page ${provenance.page || 1}, row ${index + 1}: extraction needs review`);
     transactions.push({
       ...row,
+      credit_type: creditType,
+      uncertain: Boolean(row.uncertain) || !date,
       reward_points:
         typeof row.reward_points === "number" &&
         Number.isFinite(row.reward_points)
@@ -66,8 +74,18 @@ export function normalizeExtractedTransactions(rows, provenance = {}) {
   }
   return { transactions, warnings };
 }
+export function periodWarnings(transactions = [], period) {
+  if (!period) return ["Statement period is missing; transaction dates need review"];
+  const range = parsePeriod(period);
+  if (!range) return ["Statement period is not a verifiable date range; transaction dates need review"];
+  // Card transaction dates can precede posting into the statement cycle by a few days.
+  const start = new Date(range.startDate.getTime() - 5 * 86400000).toISOString().slice(0, 10);
+  const end = new Date(range.endDate.getTime() + 5 * 86400000).toISOString().slice(0, 10);
+  const outside = transactions.filter((row) => row.date && (row.date < start || row.date > end));
+  return outside.length ? [`${outside.length} transactions fall outside the statement period; review their source rows`] : [];
+}
 export function summarizeMoney(transactions = []) {
-  const result = { grossDebits: 0, refunds: 0, netSpend: 0, selfTransfers: 0 };
+  const result = { grossDebits: 0, refunds: 0, netSpend: 0, selfTransfers: 0, otherCredits: 0, unknownCredits: 0 };
   for (const t of transactions) {
     const amount = Math.round(Number(t.amount || 0) * 100);
     if (!Number.isSafeInteger(amount)) continue;
@@ -76,46 +94,56 @@ export function summarizeMoney(transactions = []) {
       continue;
     }
     if (amount >= 0) result.grossDebits += amount;
-    else result.refunds -= amount;
+    else if (t.credit_type === "refund" || t.credit_type === "adjustment") result.refunds -= amount;
+    else if (t.credit_type === "unknown" || !t.credit_type) result.unknownCredits -= amount;
+    else result.otherCredits -= amount;
   }
   result.netSpend = result.grossDebits - result.refunds;
   return result;
 }
 export function reconcileAnalysis(data) {
+  const isCard = data.statement_type === "credit_card";
   const required = [
     data.opening_balance,
     data.closing_balance,
     data.total_credits,
+    ...(isCard ? [data.total_debits] : []),
   ];
   if (
-    data.statement_type !== "bank_account" ||
+    (data.statement_type !== "bank_account" && !isCard) ||
     required.some((x) => typeof x !== "number" || !Number.isFinite(x))
   )
     return {
       status: "unavailable",
       differenceMinor: null,
       reasons: [
-        "Supported bank-account balances and total credits are required for reconciliation",
+        isCard ? "Printed card balance, charges and payments totals are required for reconciliation" : "Supported account balances and total credits are required for reconciliation",
       ],
     };
-  // Reported total credits already include refunds; subtract gross debits only.
+  if ((data.transactions || []).some((t) => t.uncertain || (t.amount < 0 && (!t.credit_type || t.credit_type === "unknown"))))
+    return { status: "review", differenceMinor: null, reasons: ["Uncertain transactions or credit purposes need review"] };
+  // Compare the complete ledger, including incoming credits and card payments.
   const debitMinor = (data.transactions || [])
     .filter((t) => t.amount > 0)
     .reduce((sum, t) => sum + Math.round(t.amount * 100), 0);
+  const creditMinor = (data.transactions || [])
+    .filter((t) => t.amount < 0)
+    .reduce((sum, t) => sum - Math.round(t.amount * 100), 0);
   const differenceMinor =
     Math.round(data.opening_balance * 100) +
-    Math.round(data.total_credits * 100) -
-    debitMinor -
+    (isCard ? debitMinor - Math.round(data.total_credits * 100) : Math.round(data.total_credits * 100) - debitMinor) -
     Math.round(data.closing_balance * 100);
+  const creditDifferenceMinor = Math.round(data.total_credits * 100) - creditMinor;
+  const debitDifferenceMinor = isCard ? Math.round(data.total_debits * 100) - debitMinor : 0;
+  const balanced = Math.abs(differenceMinor) <= 1 && Math.abs(creditDifferenceMinor) <= 1 && Math.abs(debitDifferenceMinor) <= 1;
   return {
-    status: Math.abs(differenceMinor) <= 100 ? "balanced" : "mismatch",
+    status: balanced ? "balanced" : "mismatch",
     differenceMinor,
-    reasons:
-      Math.abs(differenceMinor) > 100
-        ? [
-            "Reported balances differ from extracted transactions; review the statement",
-          ]
-        : [],
+    reasons: balanced ? [] : [
+      ...(Math.abs(differenceMinor) > 1 ? ["Reported balances differ from extracted transactions"] : []),
+      ...(Math.abs(creditDifferenceMinor) > 1 ? ["Extracted credits differ from the statement total"] : []),
+      ...(Math.abs(debitDifferenceMinor) > 1 ? ["Extracted charges differ from the statement total"] : []),
+    ],
   };
 }
 export function buildInsightInput(transactions) {

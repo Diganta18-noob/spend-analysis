@@ -1,15 +1,17 @@
 import { ShieldCheck, AlertTriangle } from "lucide-react";
 import { formatCurrency } from "../lib/format";
-export default function QualityPanel({ quality, unknownDateCount = 0 }) {
+export default function QualityPanel({ quality, unknownDateCount = 0, unknownCreditCount = 0, uncertainCount = 0 }) {
   const reconciliation = quality?.reconciliation;
   const warnings = [...(quality?.warnings || [])];
   if (unknownDateCount)
     warnings.push(
       `${unknownDateCount} transactions need date review; they are included in totals but excluded from dated charts.`,
     );
-  const review = warnings.length > 0 || reconciliation?.status === "mismatch";
+  if (unknownCreditCount) warnings.push(`${unknownCreditCount} credits need classification before net spending can be trusted.`);
+  if (uncertainCount) warnings.push(`${uncertainCount} extracted rows need source review.`);
+  const review = warnings.length > 0 || reconciliation?.status !== "balanced";
   const title = review
-    ? "A little review can make this analysis more accurate"
+    ? "Analysis unverified — review transactions before relying on totals"
     : reconciliation?.status === "balanced"
       ? "Extracted transactions reconcile with the reported balances"
       : "Statement quality";
@@ -22,13 +24,14 @@ export default function QualityPanel({ quality, unknownDateCount = 0 }) {
         <span>{title}</span>
         <span className={`p-badge ${review ? "warning" : ""}`}>
           {review
-            ? "Needs review"
+            ? "Unverified"
             : reconciliation?.status === "balanced"
               ? "Balanced"
               : "Not verified"}
         </span>
       </summary>
       <ul>
+        {reconciliation?.reasons?.map((reason) => <li key={reason}>{reason}</li>)}
         {reconciliation?.status === "mismatch" && (
           <li>
             Balance difference:{" "}

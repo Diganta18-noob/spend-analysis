@@ -6,6 +6,9 @@ export type Transaction = {
   amount: number;
   cat: string;
   reward_points: number | null;
+  credit_type: string | null;
+  uncertain: boolean;
+  source_page?: number;
 };
 
 /** A transaction as it arrives from the API — every field is untrusted. */
@@ -15,6 +18,9 @@ export type RawTransaction = {
   amount?: unknown;
   cat?: unknown;
   reward_points?: unknown;
+  credit_type?: unknown;
+  uncertain?: unknown;
+  source_page?: unknown;
 };
 
 /** An AI-generated insight. `icon` and `color` are advisory and get mapped, not rendered raw. */
@@ -37,9 +43,11 @@ export type Analysis = {
   opening_balance?: number;
   closing_balance?: number;
   total_credits?: number;
+  total_debits?: number;
   total_reward_points?: number;
   transactions?: RawTransaction[];
   insights?: Insight[];
+  insights_status?: "withheld" | "unavailable";
   is_redacted?: boolean;
   created_at?: string;
   total_spent?: number;

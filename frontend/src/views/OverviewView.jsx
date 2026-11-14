@@ -11,11 +11,11 @@ import {
 import { ChevronRight } from "lucide-react";
 import { Card, StatCard, Button, EmptyState } from "../components/ui/PortalUI";
 import {
-  totalSpent,
   categoryTotals,
   dailySeries,
   dailyBreakdown,
   topVendors,
+  spendingSummary,
 } from "../lib/derive";
 import {
   formatCurrency,
@@ -25,10 +25,11 @@ import {
 export default function OverviewView({ transactions, onNavigate }) {
   const [selectedDay, setSelectedDay] = useState(null);
   const debits = transactions.filter((t) => t.amount > 0);
-  const refunds = -totalSpent(transactions.filter((t) => t.amount < 0));
+  const summary = spendingSummary(transactions);
   const categories = categoryTotals(debits);
-  const days = dailySeries(transactions);
-  const vendors = topVendors(transactions, 5);
+  const spendingRows = transactions.filter((t) => t.amount > 0 || t.credit_type === "refund" || t.credit_type === "adjustment");
+  const days = dailySeries(spendingRows);
+  const vendors = topVendors(debits, 5);
   const peak = days.reduce(
     (max, point) => (point.amount > (max?.amount ?? -Infinity) ? point : max),
     null,
@@ -45,19 +46,19 @@ export default function OverviewView({ transactions, onNavigate }) {
       <div className="p-stats">
         <StatCard
           label="Net spending"
-          value={formatCurrency(totalSpent(transactions))}
-          detail="Debits less refunds"
+          value={formatCurrency(summary.net)}
+          detail={summary.unclassifiedCount ? `Excludes ${summary.unclassifiedCount} unclassified credits` : "Debits less confirmed refunds"}
           featured
         />
         <StatCard
           label="Total debits"
-          value={formatCurrency(totalSpent(debits))}
+          value={formatCurrency(summary.debits)}
           detail={`${debits.length} outgoing transactions`}
         />
         <StatCard
-          label="Refunds"
-          value={formatCurrency(refunds)}
-          detail="Returned to your account"
+          label="Refunds & adjustments"
+          value={formatCurrency(summary.refunds)}
+          detail="Credits that reduce charges"
         />
         <StatCard
           label="Peak spending day"
@@ -132,7 +133,7 @@ export default function OverviewView({ transactions, onNavigate }) {
                 <h2>{formatDate(selectedDay)}</h2>
                 <Button onClick={() => setSelectedDay(null)}>Clear day</Button>
               </div>
-              {dailyBreakdown(transactions, selectedDay).map((category) => (
+              {dailyBreakdown(spendingRows, selectedDay).map((category) => (
                 <div className="p-category-row" key={category.name}>
                   <span>{category.name}</span>
                   <strong>{formatCurrency(category.value)}</strong>

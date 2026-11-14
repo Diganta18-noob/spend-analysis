@@ -152,9 +152,7 @@ export async function listAuditLogs(options) {
 }
 
 export async function updateAnalysis(id, data) {
-  const totalSpent = (data.transactions || [])
-    .filter(t => t.cat !== "Self Transfer")
-    .reduce((s, t) => s + t.amount, 0);
+  const totalSpent = summarizeMoney(data.transactions).netSpend / 100;
 
   await Analysis.updateOne({ id }, {
     $set: {

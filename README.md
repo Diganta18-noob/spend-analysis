@@ -305,6 +305,10 @@ VITE_API_URL=https://your-backend.onrender.com
 4. Start command: `npm start`
 5. Add environment variables: `GEMINI_API_KEY`, `MONGODB_URI`, `ADMIN_PASSWORD`, and `JWT_SECRET`. Set `JWT_SECRET` to a unique random value of at least 32 characters and keep it stable across deploys. Changing it invalidates existing sign-in tokens.
 
+### Statement accuracy
+
+The ICICI Amazon Pay credit-card PDF format with selectable text is parsed directly. Transaction pages are separated from explanatory pages, and extracted debits, credits, previous balance, and amount due must reconcile to printed statement totals before the direct result is accepted. Other layouts use page extraction and remain unverified when totals or source rows cannot be checked. Incoming payments and deposits are not refunds; only identified merchant refunds and adjustments reduce spending. Correct uncertain credit purposes in Transactions. AI-generated insights are withheld when extraction needs review and may be unavailable separately when the API quota is exhausted. A balanced statement verifies arithmetic, not every merchant category, so review categories before relying on them.
+
 <br>
 
 ## 📁 Project Structure

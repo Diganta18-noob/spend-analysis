@@ -22,7 +22,8 @@ import {
 import { getAccessibleAnalysis, updateAccessibleAnalysis, listAnalyses, listAuditLogs, analysisExportCursor } from './db.js';
 import { requireAnalysisAccess } from './middleware/analysisAccess.js';
 import { getJwtSecret } from './config.js';
-import { normalizeExtractedTransactions, summarizeMoney, reconcileAnalysis, buildInsightInput } from './lib/analysisQuality.js';
+import { selectTransactionPageIndexes, parseIciciCardStatement } from './lib/statementPages.js';
+import { normalizeExtractedTransactions, summarizeMoney, reconcileAnalysis, buildInsightInput, periodWarnings } from './lib/analysisQuality.js';
 import { serializeCsv } from './lib/csv.js';
 import { helmetMiddleware, createCorsMiddleware, adminRateLimit, loginRateLimit } from "./middleware/security.js";
 import { validate } from "./middleware/validate.js";
@@ -30,7 +31,6 @@ import { validateFileTypes } from "./middleware/fileTypeCheck.js";
 import { loginSchema, changePasswordSchema, updateAnalysisSchema, analysisListSchema, auditListSchema } from "./schemas.js";
 import { initSentry, sentryErrorHandler, captureException } from "./lib/sentry.js";
 import { requireAdmin, requireUserAuth, optionalUserAuth } from "./middleware/auth.js";
-import { filterTransactionsByPeriod } from "./lib/dateFilter.js";
 
 dotenv.config();
 
@@ -74,30 +74,38 @@ export async function convertPdfToImages(fileBuffer, password, onPageConverted =
     }
     
     const count = doc.countPages();
-    const images = new Array(count);
+    const pageTexts = Array.from({ length: count }, (_, index) => {
+      try { return doc.loadPage(index).toStructuredText().asText(); }
+      catch { return ""; }
+    });
+    const parsedStatement = parseIciciCardStatement(pageTexts);
+    const selectedPages = parsedStatement ? selectTransactionPageIndexes(pageTexts) : pageTexts.map((_, index) => index);
+    const images = new Array(selectedPages.length);
+    images.statementData = parsedStatement;
     
     // Dynamically adjust scale and quality to stay under Vercel's 4.5MB payload limit
     let scale = 1.6;
     let quality = 80;
     
-    if (count > 15) {
+    if (selectedPages.length > 15) {
       scale = 1.0;
       quality = 65;
-    } else if (count > 10) {
+    } else if (selectedPages.length > 10) {
       scale = 1.2;
       quality = 70;
-    } else if (count > 5) {
+    } else if (selectedPages.length > 5) {
       scale = 1.4;
       quality = 75;
     }
     
-    console.log(`Processing ${count} pages with scale ${scale}x and Grayscale JPEG quality ${quality} (concurrency limit: 4)`);
+    console.log(`Processing ${selectedPages.length} transaction pages of ${count} with scale ${scale}x and Grayscale JPEG quality ${quality} (concurrency limit: 4)`);
     
     let index = 0;
     async function worker() {
-      while (index < count) {
+      while (index < selectedPages.length) {
         const i = index++;
-        const page = doc.loadPage(i);
+        const sourcePage = selectedPages[i];
+        const page = doc.loadPage(sourcePage);
         const pixmap = page.toPixmap([scale, 0, 0, scale, 0, 0], mupdf.ColorSpace.DeviceRGB, false);
         const pngUint8 = pixmap.asPNG();
         pixmap.destroy();
@@ -107,10 +115,11 @@ export async function convertPdfToImages(fileBuffer, password, onPageConverted =
           .jpeg({ quality })
           .toBuffer();
         
+        jpegBuffer.sourcePage = sourcePage + 1;
         images[i] = jpegBuffer;
         if (onPageConverted) {
           try {
-            onPageConverted(i + 1, count);
+            onPageConverted(i + 1, selectedPages.length);
           } catch (e) {
             console.error("Progress callback failed:", e.message);
           }
@@ -288,7 +297,7 @@ app.post("/api/analyze", optionalUserAuth, upload.array("files", 10), validateFi
         // Send each page as a PNG to Gemini
         imageBuffers.forEach((buf, idx) => {
           processedFiles.push({
-            originalname: `${file.originalname}_page_${idx + 1}.jpg`,
+            originalname: `${file.originalname}_page_${buf.sourcePage || idx + 1}.jpg`,
             mimetype: "image/jpeg",
             buffer: buf,
           });
@@ -307,10 +316,7 @@ app.post("/api/analyze", optionalUserAuth, upload.array("files", 10), validateFi
 
     const data = await analyzeStatementsServer(processedFiles);
 
-    // Filter transactions to exclude illustrative pages/samples outside statement period
-    if (data.transactions && data.period) {
-      data.transactions = filterTransactionsByPeriod(data.transactions, data.period);
-    }
+    // Keep every extracted row visible for review; never silently remove a dated row.
 
     // Validate: if AI returned zero transactions, return an error instead of blank data
     if (!data.transactions || data.transactions.length === 0) {
@@ -319,6 +325,10 @@ app.post("/api/analyze", optionalUserAuth, upload.array("files", 10), validateFi
         error: "No transactions could be extracted from the uploaded statement. The image may be unclear, or the document may not contain readable transaction data. Please try uploading a clearer image." 
       });
     }
+    const normalizedV1 = normalizeExtractedTransactions(data.transactions, { page: 1 });
+    data.transactions = normalizedV1.transactions;
+    data.quality = { warnings: [...normalizedV1.warnings, ...periodWarnings(data.transactions, data.period)], reconciliation: reconcileAnalysis(data) };
+    if (data.quality.warnings.length || data.quality.reconciliation.status !== "balanced") { data.insights = []; data.insights_status = 'withheld'; }
 
     const id = uuidv4();
     
@@ -326,9 +336,7 @@ app.post("/api/analyze", optionalUserAuth, upload.array("files", 10), validateFi
     const computedTotalRewardPoints = (data.transactions || []).reduce((s, t) => s + (t.reward_points || 0), 0);
     data.total_reward_points = data.total_reward_points || computedTotalRewardPoints;
 
-    const totalSpent = (data.transactions || [])
-      .filter(t => t.cat !== "Self Transfer")
-      .reduce((s, t) => s + Number(t.amount || 0), 0);
+    const totalSpent = summarizeMoney(data.transactions).netSpend / 100;
 
     // Redact PII before saving to database
     const redactedData = redactPII(data);
@@ -471,7 +479,8 @@ app.post("/api/v2/analyze", optionalUserAuth, upload.array("files", 10), validat
 
     const imageFiles = [];
     
-    // 1. PDF to image conversion
+    // 1. PDF to image conversion (or verified text extraction for supported cards)
+    let structuredData = null;
     for (let i = 0; i < req.files.length; i++) {
       const file = req.files[i];
       if (file.mimetype === "application/pdf") {
@@ -494,11 +503,14 @@ app.post("/api/v2/analyze", optionalUserAuth, upload.array("files", 10), validat
           return res.end();
         }
 
+        if (req.files.length === 1 && pages.statementData) structuredData = pages.statementData;
+        if (structuredData) continue;
         pages.forEach((buf, pageIdx) => {
           imageFiles.push({
             buffer: buf,
             mimetype: "image/jpeg",
-            originalname: `${file.originalname}_page_${pageIdx + 1}.jpg`
+            originalname: `${file.originalname}_page_${buf.sourcePage || pageIdx + 1}.jpg`,
+            sourcePage: buf.sourcePage || pageIdx + 1,
           });
         });
       } else {
@@ -507,16 +519,18 @@ app.post("/api/v2/analyze", optionalUserAuth, upload.array("files", 10), validat
     }
 
     const totalImages = imageFiles.length;
-    let allTransactions = [];
-    let bankName = null;
-    let statementType = null;
-    let period = null;
+    let allTransactions = structuredData?.transactions || [];
+    let bankName = structuredData?.bank || null;
+    let statementType = structuredData?.statement_type || null;
+    let period = structuredData?.period || null;
     let accountHolder = null;
-    let openingBalance = null;
-    let closingBalance = null;
-    let totalCredits = null;
+    let openingBalance = structuredData?.opening_balance ?? null;
+    let closingBalance = structuredData?.closing_balance ?? null;
+    let totalCredits = structuredData?.total_credits ?? null;
+    let totalDebits = structuredData?.total_debits ?? null;
     let totalRewardPoints = null;
     const extractionWarnings = [];
+    if (structuredData && structuredData.transactions.some((row) => row.amount > 0 && row.cat === 'Other')) extractionWarnings.push('Uncategorized purchases from direct text extraction need review.');
     if (req.files.length > 1) extractionWarnings.push('Multiple files combined: reconciliation is unavailable; review individual statements and periods.');
 
     // 2. Page-by-page transaction extraction
@@ -526,7 +540,7 @@ app.post("/api/v2/analyze", optionalUserAuth, upload.array("files", 10), validat
       // We run extractTransactions using analyzeStatementsServer with PAGE_EXTRACTION_PROMPT
       const pageResult = await analyzeStatementsServer([imgFile], PAGE_EXTRACTION_PROMPT);
       
-      const normalized = normalizeExtractedTransactions(pageResult.transactions, { page: i + 1 });
+      const normalized = normalizeExtractedTransactions(pageResult.transactions, { page: imgFile.sourcePage || i + 1 });
       extractionWarnings.push(...normalized.warnings);
       // Only deduplicate explicit reference-matched rows at adjacent page boundaries.
       const previous = allTransactions.at(-1);
@@ -550,6 +564,9 @@ app.post("/api/v2/analyze", optionalUserAuth, upload.array("files", 10), validat
       if (typeof pageResult.total_credits === 'number' && Number.isFinite(pageResult.total_credits)) {
         totalCredits = totalCredits == null ? pageResult.total_credits : Math.max(totalCredits, pageResult.total_credits);
       }
+      if (typeof pageResult.total_debits === 'number' && Number.isFinite(pageResult.total_debits)) {
+        totalDebits = totalDebits == null ? pageResult.total_debits : Math.max(totalDebits, pageResult.total_debits);
+      }
       if (pageResult.reward_total_scope === 'statement' && typeof pageResult.total_reward_points === 'number' && Number.isFinite(pageResult.total_reward_points)) {
         totalRewardPoints = pageResult.total_reward_points;
       }
@@ -557,10 +574,7 @@ app.post("/api/v2/analyze", optionalUserAuth, upload.array("files", 10), validat
       sendSSE("page_extracted", { index: i + 1, total: totalImages, transactionsCount: pageResult.transactions?.length || 0 });
     }
 
-    // Filter transactions to exclude illustrative pages/samples outside statement period
-    if (allTransactions.length > 0 && period && req.files.length === 1) {
-      allTransactions = filterTransactionsByPeriod(allTransactions, period);
-    }
+    // Keep out-of-period rows visible for review rather than hiding possible extraction errors.
 
     // Validate: if zero transactions were extracted across all pages, send error
     if (allTransactions.length === 0) {
@@ -586,22 +600,28 @@ app.post("/api/v2/analyze", optionalUserAuth, upload.array("files", 10), validat
       opening_balance: openingBalance,
       closing_balance: closingBalance,
       total_credits: totalCredits,
+      total_debits: totalDebits,
       total_reward_points: finalRewardPoints,
       transactions: allTransactions,
       insights: []
     };
 
     const redactedData = redactPII(combinedData);
-    redactedData.quality = { warnings: extractionWarnings, reconciliation: reconcileAnalysis(combinedData) };
+    redactedData.quality = { warnings: [...extractionWarnings, ...periodWarnings(allTransactions, period)], reconciliation: reconcileAnalysis(combinedData) };
 
     // 4. Generate global insights from JSON
-    const insightsPrompt = GLOBAL_INSIGHTS_PROMPT + '\nInput summaries use integer paise and cover every transaction.\n' + JSON.stringify(buildInsightInput(redactedData.transactions));
-    try {
-      const insightsResult = await analyzeStatementsServer([], insightsPrompt);
-      redactedData.insights = insightsResult.insights || [];
-    } catch {
+    if (redactedData.quality.warnings.length || redactedData.quality.reconciliation.status !== 'balanced') {
       redactedData.insights = [];
-      redactedData.quality.warnings.push('Insights are unavailable. Extracted transactions are still available.');
+      redactedData.insights_status = 'withheld';
+    } else {
+      const insightsPrompt = GLOBAL_INSIGHTS_PROMPT + '\nInput summaries use integer paise and cover every transaction.\n' + JSON.stringify(buildInsightInput(redactedData.transactions));
+      try {
+        const insightsResult = await analyzeStatementsServer([], insightsPrompt);
+        redactedData.insights = insightsResult.insights || [];
+      } catch {
+        redactedData.insights = [];
+        redactedData.insights_status = 'unavailable';
+      }
     }
 
     // 5. Store in database

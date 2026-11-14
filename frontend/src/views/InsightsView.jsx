@@ -1,6 +1,6 @@
 import { Sparkles } from "lucide-react";
 import { Card, EmptyState } from "../components/ui/PortalUI";
-export default function InsightsView({ insights }) {
+export default function InsightsView({ insights, status }) {
   return (
     <>
       <div className="p-page-heading">
@@ -30,8 +30,8 @@ export default function InsightsView({ insights }) {
       ) : (
         <Card>
           <EmptyState
-            title="Insights are unavailable"
-            message="Your transactions and spending charts are still available. Insights appear when the analysis service returns them."
+            title={status === "withheld" ? "Insights need a verified statement" : "Insights are unavailable"}
+            message={status === "withheld" ? "Review uncertain rows and statement totals before relying on generated observations." : "The analysis service is unavailable. Verified transactions and spending charts remain available."}
           />
         </Card>
       )}

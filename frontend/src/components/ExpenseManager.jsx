@@ -81,6 +81,8 @@ export default function ExpenseManager({
       <QualityPanel
         quality={data.quality}
         unknownDateCount={normalized.filter((t) => !t.date).length}
+        unknownCreditCount={normalized.filter((t) => t.amount < 0 && t.credit_type === "unknown").length}
+        uncertainCount={normalized.filter((t) => t.uncertain).length}
       />
       {view !== "transactions" && (
         <InlineError
@@ -95,6 +97,7 @@ export default function ExpenseManager({
         <TransactionsView
           transactions={transactions}
           onEditCategory={persistence.editCategory}
+          onEditCreditType={persistence.editCreditType}
           onEditMerchant={persistence.editMerchantCategory}
           saveState={persistence.saveState}
           saveError={persistence.saveError}
@@ -102,7 +105,7 @@ export default function ExpenseManager({
         />
       )}
       {view === "vendors" && <VendorsView transactions={transactions} />}
-      {view === "insights" && <InsightsView insights={data.insights} />}
+      {view === "insights" && <InsightsView insights={data.insights} status={data.insights_status} />}
       {view === "rewards" && (
         <>
           <div className="p-page-heading">

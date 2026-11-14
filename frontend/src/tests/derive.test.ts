@@ -155,7 +155,7 @@ describe("vendor analytics", () => {
 describe("reward analytics", () => {
   it("detects presence of non-null reward points", () => {
     expect(hasRewardPoints(TXNS)).toBe(true);
-    expect(hasRewardPoints([{ date: "2026-05-12", desc: "x", amount: 10, cat: "Other", reward_points: null }])).toBe(false);
+    expect(hasRewardPoints([{ date: "2026-05-12", desc: "x", amount: 10, cat: "Other", reward_points: null, credit_type: null, uncertain: false }])).toBe(false);
   });
 
   it("sums declared or transaction-derived reward points", () => {

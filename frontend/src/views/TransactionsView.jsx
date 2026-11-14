@@ -9,11 +9,12 @@ import {
   ConfirmDialog,
 } from "../components/ui/PortalUI";
 import { CATEGORY_ORDER } from "../lib/categories";
-import { filterAndSort, totalSpent } from "../lib/derive";
+import { filterAndSort, spendingSummary } from "../lib/derive";
 import { formatCurrency, formatLongDate } from "../lib/format";
 export default function TransactionsView({
   transactions,
   onEditCategory,
+  onEditCreditType,
   onEditMerchant,
   saveState,
   saveError,
@@ -40,8 +41,8 @@ export default function TransactionsView({
       return `"${text.replace(/"/g, '""')}"`;
     };
     const lines = [
-      ["Date", "Merchant", "Category", "Amount INR"],
-      ...filtered.map((t) => [t.date, t.desc, t.cat, t.amount]),
+      ["Date", "Merchant", "Category", "Amount INR", "Credit purpose", "Source page", "Needs source review"],
+      ...filtered.map((t) => [t.date, t.desc, t.cat, t.amount, t.credit_type || "", t.source_page || "", t.uncertain ? "Yes" : "No"]),
     ];
     const url = URL.createObjectURL(
       new Blob(
@@ -122,14 +123,14 @@ export default function TransactionsView({
                   <th>Merchant / description</th>
                   <th>Category</th>
                   <th style={{ textAlign: "right" }}>Amount</th>
-                  <th>Merchant rule</th>
+                  <th>Credit purpose / merchant rule</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((t) => (
                   <tr key={t.sourceIndex}>
                     <td>{formatLongDate(t.date)}</td>
-                    <td className="merchant-name">{t.desc}</td>
+                    <td className="merchant-name">{t.desc}{(t.source_page || t.uncertain) && <small>{t.source_page ? `Page ${t.source_page}` : "Source row"}{t.uncertain ? " · Needs source review" : ""}</small>}</td>
                     <td>
                       <select
                         aria-label={`Category for ${t.desc}`}
@@ -145,9 +146,20 @@ export default function TransactionsView({
                     </td>
                     <td className={`p-amount ${t.amount < 0 ? "credit" : ""}`}>
                       {formatCurrency(t.amount)}
-                      {t.amount < 0 && <small>Refund</small>}
+                      {t.amount < 0 && <small>Credit</small>}
                     </td>
                     <td>
+                      {t.amount < 0 && onEditCreditType && (
+                        <select aria-label={`Credit purpose for ${t.desc}`} value={t.credit_type || "unknown"} onChange={(event) => onEditCreditType(t.sourceIndex, event.target.value)}>
+                          <option value="unknown">Needs review</option>
+                          <option value="refund">Merchant refund</option>
+                          <option value="adjustment">Fee adjustment</option>
+                          <option value="income">Income</option>
+                          <option value="transfer">Transfer received</option>
+                          <option value="card_payment">Card payment</option>
+                          <option value="other">Other credit</option>
+                        </select>
+                      )}
                       <Button
                         onClick={() =>
                           setBatch({
@@ -174,8 +186,8 @@ export default function TransactionsView({
           />
         )}
         <div className="p-pagination">
-          <span>Filtered net total</span>
-          <strong>{formatCurrency(totalSpent(filtered))}</strong>
+          <span>Filtered spending · excludes other credits</span>
+          <strong>{formatCurrency(spendingSummary(filtered).net)}</strong>
         </div>
         <Pagination
           total={filtered.length}

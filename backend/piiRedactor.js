@@ -11,6 +11,7 @@ export function redactPII(analysisData) {
   delete redacted.opening_balance;
   delete redacted.closing_balance;
   delete redacted.total_credits;
+  delete redacted.total_debits;
 
   // 3. Redact sensitive info in transaction descriptions
   if (redacted.transactions && Array.isArray(redacted.transactions)) {

@@ -16,10 +16,10 @@ export const changePasswordSchema = z
   .strict();
 
 // ─── Analysis update ────────────────────────────────────────────────
-// Category corrections are the only accepted analysis mutation.
+// Category and credit-purpose corrections are the only accepted analysis mutations.
 
 const categories = ['Rent', 'Insurance', 'Personal Transfer', 'Office Food', 'Food & Dining', 'Transport', 'Bills & Subscriptions', 'Groceries', 'Self Transfer', 'Entertainment', 'Shopping', 'Healthcare', 'Education', 'Other'];
-export const updateAnalysisSchema = z.object({ edits: z.array(z.object({ index: z.number().int().min(0), cat: z.enum(categories) }).strict()).min(1).max(10000) }).strict();
+export const updateAnalysisSchema = z.object({ edits: z.array(z.object({ index: z.number().int().min(0), cat: z.enum(categories).optional(), credit_type: z.enum(['refund', 'adjustment', 'income', 'transfer', 'card_payment', 'other', 'unknown']).optional() }).strict().refine(e => e.cat !== undefined || e.credit_type !== undefined)).min(1).max(10000) }).strict();
 const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value => {
   const date = new Date(`${value}T00:00:00Z`);
   return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;

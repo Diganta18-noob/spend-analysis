@@ -47,7 +47,7 @@ export function useAnalysisPersistence({
                   const edit =
                     session.pending.get(index) ||
                     edits.find((item) => item.index === index);
-                  return edit ? { ...row, cat: edit.cat } : row;
+                  return edit ? { ...row, ...(edit.cat === undefined ? {} : { cat: edit.cat }), ...(edit.credit_type === undefined ? {} : { credit_type: edit.credit_type }) } : row;
                 }),
               },
         );
@@ -67,7 +67,7 @@ export function useAnalysisPersistence({
       ...previous,
       transactions: previous.transactions.map((row, index) => {
         const edit = edits.find((item) => item.index === index);
-        return edit ? { ...row, cat: edit.cat } : row;
+        return edit ? { ...row, ...(edit.cat === undefined ? {} : { cat: edit.cat }), ...(edit.credit_type === undefined ? {} : { credit_type: edit.credit_type }) } : row;
       }),
     }));
     if (persisted) {
@@ -85,13 +85,14 @@ export function useAnalysisPersistence({
           ...analysis,
           transactions: analysis.transactions.map((row, index) => {
             const edit = state.edits.find((item) => item.index === index);
-            return edit ? { ...row, cat: edit.cat } : row;
+            return edit ? { ...row, ...(edit.cat === undefined ? {} : { cat: edit.cat }), ...(edit.credit_type === undefined ? {} : { credit_type: edit.credit_type }) } : row;
           }),
         }
       : analysis;
   return {
     analysis: visibleAnalysis,
     editCategory: (index, cat) => apply([{ index, cat }]),
+    editCreditType: (index, credit_type) => apply([{ index, credit_type }]),
     editMerchantCategory: (indices, cat) =>
       apply(indices.map((index) => ({ index, cat }))),
     saveState: persisted ? state.state : "local",

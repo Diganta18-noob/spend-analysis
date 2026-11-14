@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { dailySeries, dailyBreakdown, normaliseTransactions, totalSpent, rewardStats } from '../lib/derive';
+import { dailySeries, dailyBreakdown, normaliseTransactions, totalSpent, rewardStats, spendingSummary } from '../lib/derive';
 import { calendarDateKey, parseStatementDate } from '../lib/format';
 describe('calendar and edit identity regressions', () => {
   it('separates days across months', () => {
@@ -18,6 +18,7 @@ describe('calendar and edit identity regressions', () => {
   });
   it('uses minor-unit arithmetic', () => {
     expect(totalSpent(normaliseTransactions([{ amount: 0.1 }, { amount: 0.2 }]))).toBe(0.3);
+    expect(spendingSummary(normaliseTransactions([{ amount: 100 }, { amount: -20, credit_type: 'refund' }, { amount: -50, credit_type: 'income' }, { amount: -10 }]))).toEqual({ debits: 100, refunds: 20, net: 80, unclassifiedCredits: 10, unclassifiedCount: 1 });
   });
   it('prefers transaction rewards over page totals and preserves missing rewards', () => {
     const rows = normaliseTransactions([{ amount: 10, reward_points: 100 }, { amount: 20, reward_points: 200 }]);

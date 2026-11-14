@@ -16,9 +16,9 @@ STRICT ACCURACY RULES:
 6. If a number is unclear or partially visible, mark the transaction with "uncertain": true instead of guessing.
 7. Dates MUST be in YYYY-MM-DD format. If the year is ambiguous, infer from surrounding context but NEVER fabricate dates.
 8. Check for common OCR misreads: do not misread 29 as 23, 08 as 03, 6 as 8, 1 as 7, 5 as 3, etc.
-9. DO NOT extract illustrative examples, terms & conditions, interest/fee calculation tables, or sample transactions that are printed as explanations at the back of the statement. Only extract actual transactions charged to the account during the statement period.
-10. SIGN CONVENTION: Spends, purchases, and debit transactions MUST be represented as positive numbers. Merchant refunds, credits, or purchase reversals MUST be represented as negative numbers. NEVER swap them (do not make a spend negative or a refund positive).
-11. EXCLUDE CREDIT CARD BILL PAYMENTS: Do not extract payments representing the user paying their credit card bill (e.g., "Payment received", "Mobile Banking Payment", "Internet Banking Payment", "Auto-payment", "BBPS Payment", or similar bank transfers to the credit card). Only spends and merchant refunds should be extracted.
+9. DO NOT extract illustrative examples, terms & conditions, interest/fee calculation tables, or sample transactions. Extract all actual account transaction rows in the statement period.
+10. SIGN CONVENTION: Debits are positive; all credits are negative. Extract every transaction row. Preserve the original debit/credit direction.
+11. For negative amounts, set credit_type to "refund", "adjustment", "income", "transfer", "card_payment", "other", or "unknown". Merchant refunds are "refund"; bank fee or surcharge reversals are "adjustment". Set uncertain true only when the source amount, date, or direction is unclear. For debits, credit_type is null.
 
 SELF-VERIFICATION (MANDATORY):
 Before producing the final output, perform this check:
@@ -29,7 +29,7 @@ Before producing the final output, perform this check:
 
 STATEMENT TYPE DETECTION:
 - Look very carefully at the document — it may be a BANK ACCOUNT ledger or a CREDIT CARD statement.
-- FOR CREDIT CARDS: Purchases/spends are normal amounts. Payments/refunds usually have "CR" or "Cr" next to them. DO NOT extract card payment/credit transactions (e.g., descriptions containing "Payment received", "Mobile Banking Payment", "Internet Banking Payment", "Auto-payment", "BBPS Payment", or any transaction representing payment of the credit card bill). However, merchant refunds or purchase reversals (which have "CR" or "Cr" next to the amount, e.g. from merchants like Amazon, Swiggy, etc.) SHOULD be extracted. Represent the amount for these refunds as a negative number (e.g. -2089.00 for "2,089.00 CR") and extract their negative reward points (e.g., -104).
+- FOR CREDIT CARDS: Extract purchases and every credit row, including card bill payments. Represent credits as negative amounts. Classify card payments as credit_type "card_payment" and explicit merchant reversals as "refund". Do not treat card payments as refunds or spending.
 - FOR BANK ACCOUNTS: Debit transactions may be in a dedicated debit/withdrawal column, or have "Dr", "Debit", "Withdrawal", or "-" signs.
 - If the statement has a "STATEMENT SUMMARY" box, strictly extract the "Total Credits" / "Payments" / "Deposits" value for the 'total_credits' field, and use the "Purchases/Charges" or total debits for your own reference to ensure you don't over-extract.
 
@@ -72,12 +72,14 @@ Respond ONLY with a valid JSON object — no markdown, no code fences, no preamb
   "opening_balance": 388.01,
   "closing_balance": 124.00,
   "total_credits": 36770.00,
+  "total_debits": 8055.77,
   "total_reward_points": 315,
   "transactions": [
     {
       "date": "2026-04-02",
       "desc": "SmartQ Canteen",
       "amount": 64.00,
+      "credit_type": null,
       "cat": "Office Food",
       "reward_points": 3,
       "uncertain": false
@@ -86,6 +88,7 @@ Respond ONLY with a valid JSON object — no markdown, no code fences, no preamb
       "date": "2026-04-03",
       "desc": "Amazon Pay IN E COMMERC (Refund)",
       "amount": -2089.00,
+      "credit_type": "refund",
       "cat": "Shopping",
       "reward_points": -104,
       "uncertain": false
@@ -130,7 +133,7 @@ Common vendor patterns:
 const MAX_RETRIES = 2; // Will attempt up to 2 more times if issues detected
 
 export const PAGE_EXTRACTION_PROMPT = `You are a highly accurate bank statement OCR and transaction extraction engine.
-Report statement_type as "bank_account" only for deposit-account statements, "credit_card" for card statements, or null if uncertain. total_credits must be the statement-wide reported total credits including refunds, never an inferred per-page subtotal. Use null when balances or total credits are absent.
+Report statement_type as "bank_account" only for deposit-account statements, "credit_card" for card statements, or null if uncertain. For credit cards, opening_balance is Previous Balance, closing_balance is Total Amount Due, total_debits is the statement-wide Purchases / Charges, and total_credits is statement-wide Payments / Credits. Use null when a printed total is absent; never infer these fields from transaction rows.
 
 PRIMARY RULE: Accuracy of numbers is MORE IMPORTANT than speed. Never estimate, round, infer, or invent amounts.
 
@@ -142,13 +145,13 @@ STRICT RULES:
 5. If a number is unclear or partially visible, set "uncertain": true on that transaction instead of guessing.
 6. Dates must be in YYYY-MM-DD format. If the year is ambiguous, infer from context.
 7. Check for OCR misreads: don't confuse 29/23, 08/03, 6/8, 1/7, 5/3.
-8. Extract ALL debit/expense transactions — do not skip any visible debit entry.
-9. SIGN CONVENTION & BILL PAYMENTS: Spends, purchases, and debit transactions MUST be represented as POSITIVE numbers. Merchant refunds, credits, or purchase reversals (often ending in CR/Cr) MUST be represented as NEGATIVE numbers. NEVER swap them.
-10. EXCLUDE CREDIT CARD BILL PAYMENTS: Do not extract payments representing the user paying their credit card bill (e.g., "Payment received", "Mobile Banking Payment", "Internet Banking Payment", "Auto-payment", "BBPS Payment", or similar bank transfers to the credit card). Only spends and merchant refunds should be extracted.
+8. Extract EVERY transaction row, including debits, deposits, transfers received, card payments and merchant refunds. Do not silently omit credits.
+9. SIGN CONVENTION: Debits are positive and credits are negative. Copy the original debit/credit direction from the statement; never infer it from the merchant name.
+10. For each credit set credit_type to "refund", "adjustment", "income", "transfer", "card_payment", "other", or "unknown". Use "refund" only for a merchant refund or purchase reversal; use "adjustment" for a reversed fee or surcharge. If its purpose is unclear use "unknown". Set uncertain true only when the source row's date, amount, or debit/credit direction cannot be read reliably. For debits set credit_type to null.
 11. If a "STATEMENT SUMMARY" box is visible, extract "Total Credits" for the total_credits field.
 For reward totals, include reward_total_scope: "statement" ONLY if an explicit statement-wide reward summary is visible. Page transaction sums are not statement totals; omit the scope otherwise.
 12. REWARD POINTS: Look for a column containing reward points (often labeled 'Reward Points' or 'Points Earned' on page 1, but may appear without headers on subsequent pages). If you see a column of integers next to the amounts representing points earned/reversed, extract them for each transaction into the 'reward_points' field (preserving negative numbers for refunds). If no such column exists, set it to null. For page continuations where headers are missing, identify the reward points column based on its relative position to the amount column or from the values (typically small integers, or negative numbers for refunds).
-13. DO NOT extract illustrative examples, terms & conditions, interest/fee calculation tables, or sample transactions that are printed as explanations at the back of the statement. Only extract actual transactions charged to the account during the statement period.
+13. DO NOT extract illustrative examples, terms & conditions, interest/fee calculation tables, or sample transactions. Extract all actual account transaction rows in the statement period.
 
 CATEGORY LIST: Rent, Insurance, Food & Dining, Office Food, Transport, Groceries, Bills & Subscriptions, Personal Transfer, Self Transfer, Entertainment, Shopping, Healthcare, Education, Other
 - "Self Transfer" is ONLY for transfers to the SAME person's own accounts. UPI/NEFT to other people = "Personal Transfer".
@@ -161,12 +164,14 @@ Respond ONLY with a valid JSON object — no markdown, no code fences, no preamb
   "opening_balance": 123.45,
   "closing_balance": 123.45,
   "total_credits": 123.45,
+  "total_debits": 123.45,
   "total_reward_points": 100,
   "transactions": [
     {
       "date": "YYYY-MM-DD",
       "desc": "Merchant/Payee name (max 40 chars)",
       "amount": 100.00,
+      "credit_type": null,
       "cat": "Category name",
       "reward_points": 10,
       "uncertain": false
@@ -458,6 +463,7 @@ export async function analyzeStatementsServer(files, prompt = AI_PROMPT) {
 
           } catch (versionError) {
             lastVersionError = versionError;
+            if (versionError.isQuotaError) throw versionError;
             // If location error, try the next API version
             if (versionError.isLocationError) {
               sawLocationError = true;
@@ -485,6 +491,11 @@ export async function analyzeStatementsServer(files, prompt = AI_PROMPT) {
         if (lastVersionError) throw lastVersionError;
 
       } catch (modelError) {
+        if (modelError.isQuotaError) {
+          const quotaError = new Error("Statement extraction is unavailable because the Gemini API quota is exhausted. No partial analysis was saved. Try again after the quota resets or increase the project quota.");
+          quotaError.status = 429;
+          throw quotaError;
+        }
         // If it's a recoverable error and we have more models to try, fall back
         const canFallback = modelIdx < MODEL_CHAIN.length - 1;
         const isTimeout = modelError.status === 504 || 

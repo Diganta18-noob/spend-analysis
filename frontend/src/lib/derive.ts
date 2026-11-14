@@ -5,6 +5,7 @@ import type {
   StoredAnalysis,
 } from "./types";
 import { normaliseMerchant, calendarDateKey, parseStatementDate } from "./format";
+const CREDIT_TYPES = new Set(["refund", "adjustment", "income", "transfer", "card_payment", "other", "unknown"]);
 
 export type CategoryTotal = {
   name: string;
@@ -71,6 +72,9 @@ export function normaliseTransactions(raw: RawTransaction[] | undefined): Transa
       amount: amtNum,
       cat: catStr,
       reward_points: pts,
+      credit_type: amtNum < 0 ? (typeof t.credit_type === "string" && CREDIT_TYPES.has(t.credit_type) ? t.credit_type : "unknown") : null,
+      uncertain: Boolean(t.uncertain),
+      source_page: typeof t.source_page === "number" ? t.source_page : undefined,
     };
   });
 }
@@ -102,6 +106,20 @@ export function categoryTotals(txns: Transaction[]): CategoryTotal[] {
 /** Calculate total spent across transactions. */
 export function totalSpent(txns: Transaction[]): number {
   return txns.reduce((sum, t) => sum + Math.round(t.amount * 100), 0) / 100;
+}
+
+/** Spending excludes incoming money unless it is explicitly a merchant refund. */
+export function spendingSummary(txns: Transaction[]) {
+  const debits = txns.filter((t) => t.amount > 0);
+  const refunds = txns.filter((t) => t.amount < 0 && (t.credit_type === "refund" || t.credit_type === "adjustment"));
+  const unclassifiedCredits = txns.filter((t) => t.amount < 0 && (!t.credit_type || t.credit_type === "unknown"));
+  return {
+    debits: totalSpent(debits),
+    refunds: -totalSpent(refunds),
+    net: totalSpent([...debits, ...refunds]),
+    unclassifiedCredits: -totalSpent(unclassifiedCredits),
+    unclassifiedCount: unclassifiedCredits.length,
+  };
 }
 
 /** Group transactions by day of month. */
